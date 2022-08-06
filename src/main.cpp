@@ -197,7 +197,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
             ++symlinkCnt;
 
             if (get_option (SHOW_SYMLINKS)) {
-                wprintf (L"%20s    %-*c%ls\n", "SYMLINK", indentWidth, ' ', filename.c_str ());
+                wprintf (L"%20s    %-*c%ls -> %ls\n", "SYMLINK", indentWidth, ' ', filename.c_str (), fs::read_symlink (entry).wstring ().c_str ());
             }
         }
         else if (isFile) {
