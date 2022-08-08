@@ -206,9 +206,9 @@ print_last_modif_time (const fs::directory_entry &pFsEntry)
 }
 
 /**
- * @brief
+ * @brief                   Prints the permissions of a filesystem entry in a well formatted manner
  *
- * @param pEntryStatus
+ * @param pEntryStatus      Reference to the status of the entry whose permissions need to be printed
  */
 void
 print_permissions (const fs::file_status &pEntryStatus)
