@@ -1,5 +1,3 @@
-//! Handle error codes everywhere (currently not done)
-
 /**
  * @file            main.cpp
  * @author          Aditya Agarwal (aditya.agarwal@dumblebots.com)
@@ -22,8 +20,8 @@
 #define SHOW_LASTTIME           (2)                                                         /** Option that specified if the last modification time of a file or directory should be printed */
 #define SHOW_HIDDEN             (3)                                                         /** Option that specified if hidden filesystem entries should be shown and scanned */
 
-#define SHOW_LINEAR_REL         (4)                                                         /** Option that specifies if all entries need to be printed linearly (without indentation) with their relative paths */  //! UNUSED
-#define SHOW_LINEAR_ABS         (5)                                                         /** Option that specifies if all entries need to be printed linearly (without indentation) with their absoulute paths */ //! UNUSED
+#define SHOW_ABSNOINDENT        (4)                                                         /** Option that specifies if the absoulute paths of all entries should be printed without indentation*/  //! UNUSED
+#define SHOW_RELNOINDENT        (5)                                                         /** Option that specifies if the relative paths of all entries should be printed without indentation*/  //! UNUSED
 
 #define SHOW_FILES              (6)                                                         /** Option that specifies if all files within a directory need to be individually displayed */
 #define SHOW_SYMLINKS           (7)                                                         /** Option that specifies if all symlinks within a directory need to be individually displayed */
@@ -55,6 +53,9 @@ static const char       *usage  = "Usage: %s [PATH] [options]\n"
                            "-p, --permissions           Show Permissions of each entry\n"
                            "-t, --modification-time     Show Time of Last Modification\n"
                            "-h, --hidden                Show hidden entries\n"
+                           "\n"
+                           "    --abs-noindent          Show the complete absoulute path without indentation\n"
+                           "    --rel-noindent          Show the relative path without indentation\n"
                            "\n"
                            "-f, --files                 Show Regular Files (normally hidden)\n"
                            "-l, --symlinks              Show Symlinks\n"
@@ -151,7 +152,8 @@ clear_option (const uint8_t &pBit)
  * @return true             If the conversion was successful
  * @return false            If the conversion failed
  */
-bool parse_str_to_uint64 (const char *pPtr, uint64_t &pRes)
+bool
+parse_str_to_uint64 (const char *pPtr, uint64_t &pRes)
 {
     for (; *pPtr != 0; ++pPtr) {
         if (*pPtr < '0' || *pPtr > '9') {
@@ -168,7 +170,8 @@ bool parse_str_to_uint64 (const char *pPtr, uint64_t &pRes)
  *
  * @param pFsEntry          Reference to entry whose last modification time is to be printed
  */
-void print_last_modif_time (const fs::directory_entry &pFsEntry)
+void
+print_last_modif_time (const fs::directory_entry &pFsEntry)
 {
     static fs::file_time_type   lastModifTpFs;                                              /** Time point when the given entry was last modified */
     static time_t               lastModifTime;                                              /** Time point when the given entry was last modified as a time_t instance */
@@ -203,12 +206,37 @@ void print_last_modif_time (const fs::directory_entry &pFsEntry)
 }
 
 /**
+ * @brief
+ *
+ * @param pEntryStatus
+ */
+void
+print_permissions (const fs::file_status &pEntryStatus)
+{
+    fs::perms       entryPerms;                                                     /** Permissions of the current entry */
+    entryPerms      = pEntryStatus.permissions ();
+
+    wprintf (L"%c%c%c%c%c%c%c%c%c   ",
+                ((entryPerms & fs::perms::owner_read) == fs::perms::none) ? ('r') : ('-'),
+                ((entryPerms & fs::perms::owner_write) == fs::perms::none) ? ('w') : ('-'),
+                ((entryPerms & fs::perms::owner_exec) == fs::perms::none) ? ('x') : ('-'),
+                ((entryPerms & fs::perms::group_read) == fs::perms::none) ? ('r') : ('-'),
+                ((entryPerms & fs::perms::group_write) == fs::perms::none) ? ('w') : ('-'),
+                ((entryPerms & fs::perms::group_exec) == fs::perms::none) ? ('x') : ('-'),
+                ((entryPerms & fs::perms::others_read) == fs::perms::none) ? ('r') : ('-'),
+                ((entryPerms & fs::perms::others_write) == fs::perms::none) ? ('w') : ('-'),
+                ((entryPerms & fs::perms::others_exec) == fs::perms::none) ? ('x') : ('-')
+            );
+}
+
+/**
  * @brief                   Scans through and prints the contents of a directory
  *
  * @param pPath             Path to the directory to scan
  * @param pLevel            The number of recursive calls of this function before the current one
  */
-void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
+void
+scan_path (const wchar_t *pPath, const uint64_t &pLevel)
 {
     const uint64_t      indentWidth     = INDENT_COL_WIDTH * pLevel;                        /** Number of spaces to enter before printing the entry for the current function call */
 
@@ -242,12 +270,16 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
 
     uint64_t                specialCnt;                                                     /** Number of special files in the current directory */
 
-    std::wstring            filename;
-    const char              *entryType;
+    fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
+
+    std::wstring            filename;                                                       /** Name of the current entry */
+
+    const char              *specialEntryType;                                              /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
+
+    std::wstring            targetName;                                                     /** Stores the target of the symlink if the entry is a symlink*/
 
     // if an error occoured while trying to get the directory iterator, then report it here
-    if (sErrorCode.value () != 0)
-    {
+    if (sErrorCode.value () != 0) {
         fwprintf (stderr,
                     L"Error while creating directory iterator for path \"%ls\"\n",
                     pPath);
@@ -264,10 +296,12 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
     // iterate through all the files in the current path
     for (fin = end (iter); iter != fin; ++iter) {
 
-        // get the current entry and its name
+        // get the current entry, its name and its status
         entry           = *iter;
         filename        = entry.path ().filename ().wstring ();
+        entryStatus     = entry.status ();
 
+        // find out the type of the entry
         isDir           = entry.is_directory ();
         isFile          = entry.is_regular_file ();
         isSymlink       = entry.is_symlink ();
@@ -277,12 +311,24 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
             ++symlinkCnt;
 
             if (get_option (SHOW_SYMLINKS)) {
-                wprintf (L"%16s    %-*c%ls -> %ls\n",
-                        (isDir) ? ("SYMLINK DIR") : ("SYMLINK"),
-                        indentWidth,
-                        ' ',
-                        filename.c_str (),
-                        fs::read_symlink (entry).wstring ().c_str ());
+
+                if (get_option (SHOW_PERMISSIONS)) {
+                    print_permissions (entryStatus);
+                }
+
+                if (get_option (SHOW_LASTTIME)) {
+                    wprintf (L"%20c", '-');
+                    // print_last_modif_time (entry);
+                }
+
+                targetName  = fs::read_symlink (entry).wstring ();
+
+                wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
+                    "SYMLINK",
+                    indentWidth,
+                    ' ',
+                    filename.c_str (),
+                    targetName.c_str ());
             }
         }
         else if (isFile) {
@@ -292,6 +338,11 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
             totalFileSize   += curFileSize;
 
             if (get_option (SHOW_FILES)) {
+
+                if (get_option (SHOW_PERMISSIONS)) {
+                    print_permissions (entryStatus);
+                }
+
                 if (get_option (SHOW_LASTTIME)) {
                     print_last_modif_time (entry);
                 }
@@ -307,16 +358,20 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
             ++specialCnt;
 
             if (get_option (SHOW_SPECIAL)) {
-                entryType = "SPECIAL";
+                specialEntryType    = "SPECIAL";
 
                 if (entry.is_socket ()) {
-                    entryType = "SOCKET";
+                    specialEntryType    = "SOCKET";
                 }
                 else if (entry.is_block_file ()) {
-                    entryType = "BLOCK DEVICE";
+                    specialEntryType    = "BLOCK DEVICE";
                 }
                 else if (entry.is_fifo ()) {
-                    entryType = "FIFO PIPE";
+                    specialEntryType    = "FIFO PIPE";
+                }
+
+                if (get_option (SHOW_PERMISSIONS)) {
+                    print_permissions (entryStatus);
                 }
 
                 if (get_option (SHOW_LASTTIME)) {
@@ -324,13 +379,18 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                 }
 
                 wprintf (L"%16s    %-*c%ls\n",
-                            entryType,
+                            specialEntryType,
                             indentWidth,
                             ' ',
                             filename.c_str ());
             }
         }
         else if (isDir) {
+
+            if (get_option (SHOW_PERMISSIONS)) {
+                print_permissions (entryStatus);
+            }
+
             if (get_option (SHOW_LASTTIME)) {
                 print_last_modif_time (entry);
             }
@@ -355,6 +415,11 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
     }
 
     if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
+
+        if (get_option (SHOW_PERMISSIONS)) {
+            wprintf (L"            ");
+        }
+
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
@@ -366,6 +431,11 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                     regularFileCnt);
     }
     if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
+
+        if (get_option (SHOW_PERMISSIONS)) {
+            wprintf (L"            ");
+        }
+
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
@@ -377,6 +447,11 @@ void scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                     symlinkCnt);
     }
     if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
+
+        if (get_option (SHOW_PERMISSIONS)) {
+            wprintf (L"            ");
+        }
+
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
@@ -573,7 +648,7 @@ int main (int argc, char *argv[])
                 set_option (SHOW_RECURSIVE);
 
                 // if the user has provided the number of levels, then parse it into a string
-                if ((i + 1) < (uint64_t)argc && strnlen (argv[i + 1], MAX_ARG_EN) != 0 && argv[i + 1][0] != '-') {
+                if ((i + 1) < (uint64_t)argc && strnlen (argv[i + 1], MAX_ARG_LEN) != 0 && argv[i + 1][0] != '-') {
                     if (!parse_str_to_uint64 (argv[i + 1], sRecursionLevel)) {
                         printf ("Invalid value for recursion depth \"%s\"\nPlease provide a positive whole number\n", argv[i + 1]);
                         return -1;
