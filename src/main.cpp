@@ -18,20 +18,19 @@
 
 #define SHOW_PERMISSIONS        (1)                                                         /** Option that specified if the permissions of a filesystem entry should be printed */
 #define SHOW_LASTTIME           (2)                                                         /** Option that specified if the last modification time of a file or directory should be printed */
-#define SHOW_HIDDEN             (3)                                                         /** Option that specified if hidden filesystem entries should be shown and scanned */
 
-#define SHOW_ABSNOINDENT        (4)                                                         /** Option that specifies if the absoulute paths of all entries should be printed without indentation */
-#define SHOW_RELNOINDENT        (5)                                                         /** Option that specifies if the relative paths of all entries should be printed without indentation */
+#define SHOW_ABSNOINDENT        (3)                                                         /** Option that specifies if the absoulute paths of all entries should be printed without indentation */
+#define SHOW_RELNOINDENT        (4)                                                         /** Option that specifies if the relative paths of all entries should be printed without indentation */
 
-#define SHOW_FILES              (6)                                                         /** Option that specifies if all files within a directory need to be individually displayed */
-#define SHOW_SYMLINKS           (7)                                                         /** Option that specifies if all symlinks within a directory need to be individually displayed */
-#define SHOW_SPECIAL            (8)                                                         /** Option that specifies if all special files (such as sockets, block devices etc.) within a directory need to be individually displayed */
+#define SHOW_FILES              (5)                                                         /** Option that specifies if all files within a directory need to be individually displayed */
+#define SHOW_SYMLINKS           (6)                                                         /** Option that specifies if all symlinks within a directory need to be individually displayed */
+#define SHOW_SPECIAL            (7)                                                         /** Option that specifies if all special files (such as sockets, block devices etc.) within a directory need to be individually displayed */
 
-#define SEARCH_EXACT            (9)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */ //! UNUSED
-#define SEARCH_NOEXT            (10)                                                        /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */ //! UNUSED
-#define SEARCH_CONTAINS         (11)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
+#define SEARCH_EXACT            (8)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */ //! UNUSED
+#define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */ //! UNUSED
+#define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
 
-#define HELP                    (12)                                                        /** Option that specified if usage instructions need to be printed */
+#define HELP                    (11)                                                        /** Option that specified if usage instructions need to be printed */
 
 #define MAX_ARG_LEN             (32)                                                        /** Maximum allowed length of an argument (other than the path) after which it is not checked further */
 #define MAX_PATH_LEN            (256)                                                       /** Maximum allowed length of the provided path after which any further characters are ignored */
@@ -52,7 +51,6 @@ static const char       *usage  = "Usage: %s [PATH] [options]\n"
                            "-r, --recursive             Recursively go through directories\n"
                            "-p, --permissions           Show Permissions of each entry\n"
                            "-t, --modification-time     Show Time of Last Modification\n"
-                           "-h, --hidden                Show hidden entries\n"
                            "\n"
                            "    --abs-noindent          Show the complete absoulute path without indentation\n"
                            "    --rel-noindent          Show the relative path without indentation\n"
@@ -309,24 +307,46 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
 
         if (get_option (SHOW_ABSNOINDENT)) {
             // filepath    = fs::absolute (filepath);
-            filepath    = fs::canonical (filepath);
+            filepath    = fs::canonical (filepath, sErrorCode);
+            if (sErrorCode.value () != 0) {
+                fwprintf (stderr,
+                            L"Error while converting filepath to canonical value for \"%ls\"\n",
+                            filepath.wstring ().c_str ());
+                fwprintf (stderr,
+                            L"Error Code: %4d\n",
+                            sErrorCode.value ());
+                fwprintf (stderr, L"%s\n", sErrorCode.message ());
+            }
         }
         else if (get_option (SHOW_RELNOINDENT)) {
-            filepath    = (isSymlink) ? (filepath.filename ()) : (fs::relative (filepath));
+
+            if (isSymlink) {
+                filepath    = filepath.filename ();
+            }
+            else {
+                filepath    = fs::relative (filepath, sErrorCode);
+                if (sErrorCode.value () != 0) {
+                    fwprintf (stderr,
+                                L"Error while converting filepath to relative value for \"%ls\"\n",
+                                filepath.wstring ().c_str ());
+                    fwprintf (stderr,
+                                L"Error Code: %4d\n",
+                                sErrorCode.value ());
+                    fwprintf (stderr, L"%s\n", sErrorCode.message ());
+                }
+            }
         }
 
         if (isSymlink) {
             ++symlinkCnt;
 
             if (get_option (SHOW_SYMLINKS)) {
-
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
 
                 if (get_option (SHOW_LASTTIME)) {
                     wprintf (L"%20c", '-');
-                    // print_last_modif_time (entry);
                 }
 
                 targetName  = fs::read_symlink (entry).wstring ();
@@ -597,9 +617,6 @@ int main (int argc, char *argv[])
             else if (strncmp (argv[i], "-p", 2) == 0) {
                 set_option (SHOW_PERMISSIONS);
             }
-            else if (strncmp (argv[i], "-h", 2) == 0) {
-                set_option (SHOW_HIDDEN);
-            }
             else if (strncmp (argv[i], "-S", 2) == 0) {
                 // make sure that multiple search modes are not being used simultaneously
                 if (get_option (SEARCH_NOEXT) || get_option (SEARCH_CONTAINS)) {
@@ -644,10 +661,7 @@ int main (int argc, char *argv[])
             break;
 
         case 8:
-            if (strncmp (argv[i], "--hidden", 8) == 0) {
-                set_option (SHOW_HIDDEN);
-            }
-            else if (strncmp (argv[i], "--search", 8) == 0) {
+            if (strncmp (argv[i], "--search", 8) == 0) {
 
                 // make sure that multiple search modes are not being used simultaneously
                 if (get_option (SEARCH_NOEXT) || get_option (SEARCH_CONTAINS)) {
