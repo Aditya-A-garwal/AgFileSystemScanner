@@ -20,8 +20,8 @@
 #define SHOW_LASTTIME           (2)                                                         /** Option that specified if the last modification time of a file or directory should be printed */
 #define SHOW_HIDDEN             (3)                                                         /** Option that specified if hidden filesystem entries should be shown and scanned */
 
-#define SHOW_ABSNOINDENT        (4)                                                         /** Option that specifies if the absoulute paths of all entries should be printed without indentation*/  //! UNUSED
-#define SHOW_RELNOINDENT        (5)                                                         /** Option that specifies if the relative paths of all entries should be printed without indentation*/  //! UNUSED
+#define SHOW_ABSNOINDENT        (4)                                                         /** Option that specifies if the absoulute paths of all entries should be printed without indentation */
+#define SHOW_RELNOINDENT        (5)                                                         /** Option that specifies if the relative paths of all entries should be printed without indentation */
 
 #define SHOW_FILES              (6)                                                         /** Option that specifies if all files within a directory need to be individually displayed */
 #define SHOW_SYMLINKS           (7)                                                         /** Option that specifies if all symlinks within a directory need to be individually displayed */
@@ -272,7 +272,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
 
     fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
 
-    std::wstring            filename;                                                       /** Name of the current entry */
+    fs::path                filepath;                                                       /** Name of the current entry */
 
     const char              *specialEntryType;                                              /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
 
@@ -298,7 +298,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
 
         // get the current entry, its name and its status
         entry           = *iter;
-        filename        = entry.path ().filename ().wstring ();
+        filepath        = entry.path ();
         entryStatus     = entry.status ();
 
         // find out the type of the entry
@@ -306,6 +306,14 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
         isFile          = entry.is_regular_file ();
         isSymlink       = entry.is_symlink ();
         isSpecial       = entry.is_other ();
+
+        if (get_option (SHOW_ABSNOINDENT)) {
+            // filepath    = fs::absolute (filepath);
+            filepath    = fs::canonical (filepath);
+        }
+        else if (get_option (SHOW_RELNOINDENT)) {
+            filepath    = (isSymlink) ? (filepath.filename ()) : (fs::relative (filepath));
+        }
 
         if (isSymlink) {
             ++symlinkCnt;
@@ -323,12 +331,20 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
 
                 targetName  = fs::read_symlink (entry).wstring ();
 
-                wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
-                    "SYMLINK",
-                    indentWidth,
-                    ' ',
-                    filename.c_str (),
-                    targetName.c_str ());
+                if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                    wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
+                                "SYMLINK",
+                                filepath.wstring ().c_str (),
+                                targetName.c_str ());
+                }
+                else {
+                    wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
+                                "SYMLINK",
+                                indentWidth,
+                                ' ',
+                                filepath.filename ().wstring ().c_str (),
+                                targetName.c_str ());
+                }
             }
         }
         else if (isFile) {
@@ -347,11 +363,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                     print_last_modif_time (entry);
                 }
 
-                wprintf (L"%16llu    %-*c%ls\n",
-                        curFileSize,
-                        indentWidth,
-                        ' ',
-                        filename.c_str ());
+                if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
+                    wprintf (L"%16llu    %ls\n",
+                                curFileSize,
+                                filepath.wstring ().c_str ());
+                }
+                else {
+                    wprintf (L"%16llu    %-*c%ls\n",
+                                curFileSize,
+                                indentWidth,
+                                ' ',
+                                filepath.filename ().wstring ().c_str ());
+                }
             }
         }
         else if (isSpecial) {
@@ -378,11 +401,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                     wprintf (L"%24c", ' ');
                 }
 
-                wprintf (L"%16s    %-*c%ls\n",
-                            specialEntryType,
-                            indentWidth,
-                            ' ',
-                            filename.c_str ());
+                if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                    wprintf (L"%16s    %ls\n",
+                                specialEntryType,
+                                filepath.wstring ().c_str ());
+                }
+                else {
+                    wprintf (L"%16s    %-*c%ls\n",
+                                specialEntryType,
+                                indentWidth,
+                                ' ',
+                                filepath.filename ().wstring ().c_str ());
+                }
             }
         }
         else if (isDir) {
@@ -395,10 +425,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                 print_last_modif_time (entry);
             }
 
-            wprintf (L"%16llu    %-*c<%ls>\n",
-                        0, indentWidth,
-                        ' ',
-                        filename.c_str ());
+            if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                wprintf (L"%16llu    <%ls>\n",
+                            0,
+                            filepath.wstring ().c_str ());
+            }
+            else {
+                wprintf (L"%16llu    %-*c<%ls>\n",
+                            0,
+                            indentWidth,
+                            ' ',
+                            filepath.filename ().wstring ().c_str ());
+            }
 
             if (get_option (SHOW_RECURSIVE)) {
                 if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
@@ -424,11 +462,21 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
             wprintf (L"%20c", ' ');
         }
 
-        wprintf (L"%16llu    %-*c<%llu files>\n",
-                    totalFileSize,
-                    indentWidth,
-                    ' ',
-                    regularFileCnt);
+        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            wprintf (L"%16llu    %-*c<%llu files>\n",
+                        totalFileSize,
+                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
+                        ' ',
+                        regularFileCnt);
+        }
+        else {
+            wprintf (L"%16llu    %-*c<%llu files>\n",
+                        totalFileSize,
+                        indentWidth,
+                        ' ',
+                        regularFileCnt);
+        }
+
     }
     if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
 
@@ -440,11 +488,21 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
             wprintf (L"%20c", ' ');
         }
 
-        wprintf (L"%16c    %-*c<%llu symlinks>\n",
-                    '-',
-                    indentWidth,
-                    ' ',
-                    symlinkCnt);
+        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            wprintf (L"%16c    %-*c<%llu symlinks>\n",
+                        '-',
+                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
+                        ' ',
+                        symlinkCnt);
+        }
+        else {
+            wprintf (L"%16c    %-*c<%llu symlinks>\n",
+                        '-',
+                        indentWidth,
+                        ' ',
+                        symlinkCnt);
+        }
+
     }
     if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
 
@@ -456,11 +514,21 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
             wprintf (L"%20c", ' ');
         }
 
-        wprintf (L"%16c    %-*c<%llu special entries>\n",
-                    '-',
-                    indentWidth,
-                    ' ',
-                    specialCnt);
+        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            wprintf (L"%16c    %-*c<%llu special entries>\n",
+                        '-',
+                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
+                        ' ',
+                        specialCnt);
+        }
+        else {
+            wprintf (L"%16c    %-*c<%llu special entries>\n",
+                        '-',
+                        indentWidth,
+                        ' ',
+                        specialCnt);
+        }
+
     }
 }
 
@@ -690,6 +758,25 @@ int main (int argc, char *argv[])
                 // set the option and skip the next argument (that is the search pattern)
                 set_option (SEARCH_NOEXT);
                 searchPattern = argv[++i];
+            }
+            else if (strncmp (argv[i], "--abs-noindent", 14) == 0) {
+
+                if (get_option (SHOW_RELNOINDENT)) {
+                    wprintf (L"Can not simultaneously set flags \"--abs-noindent\" and \"--rel-noindent\"\n");
+                    wprintf (L"Terminating...\n");
+                    std::exit (-1);
+                }
+
+                set_option (SHOW_ABSNOINDENT);
+            }
+            else if (strncmp (argv[i], "--rel-noindent", 14) == 0) {
+                if (get_option (SHOW_ABSNOINDENT)) {
+                    wprintf (L"Can not simultaneously set flags \"--abs-noindent\" and \"--rel-noindent\"\n");
+                    wprintf (L"Terminating...\n");
+                    std::exit (-1);
+                }
+
+                set_option (SHOW_RELNOINDENT);
             }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
