@@ -9,7 +9,6 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
-#include <ctime>
 
 #include <filesystem>
 #include <chrono>
@@ -83,22 +82,22 @@ static const wchar_t    *summary    = L"\n"
                                     L"<%lu total entries>\n"
                                     L"\n";
 
-static uint64_t         sOptionMask {};                                                     /** Bitmask to represent command line options provided by the user */
-static std::error_code  sErrorCode {};                                                      /** Container for error code to be passed around when dealing with std::filesystem artifacts */
+static uint64_t         sOptionMask         {};                                             /** Bitmask to represent command line options provided by the user */
+static std::error_code  sErrorCode          {};                                             /** Container for error code to be passed around when dealing with std::filesystem artifacts */
 
-static uint64_t         sRecursionLevel {};                                                 /** Number of levels of directories to go within if the recursive option is set */
+static uint64_t         sRecursionLevel     {};                                             /** Number of levels of directories to go within if the recursive option is set */
 
-static uint64_t         sNumFilesTotal {};
-static uint64_t         sNumSymlinksTotal {};
-static uint64_t         sNumSpecialTotal {};
-static uint64_t         sNumDirsTotal {};
+static uint64_t         sNumFilesTotal      {};                                             /** Total number of files traversed */
+static uint64_t         sNumSymlinksTotal   {};                                             /** Total number of Symlinks traversed */
+static uint64_t         sNumSpecialTotal    {};                                             /** Total number of special files traversed */
+static uint64_t         sNumDirsTotal       {};                                             /** Total number of directories traversed */
 
-static uint64_t         sNumFilesRoot {};
-static uint64_t         sNumSymlinksRoot {};
-static uint64_t         sNumSpecialRoot {};
-static uint64_t         sNumDirsRoot {};
+static uint64_t         sNumFilesRoot       {};                                             /** Number of files traversed in the root directory */
+static uint64_t         sNumSymlinksRoot    {};                                             /** Number of symlinks traversed in the root directory */
+static uint64_t         sNumSpecialRoot     {};                                             /** Number of special files traversed in the root directory */
+static uint64_t         sNumDirsRoot        {};                                             /** Number of subdirectories in the root directory */
 
-static wchar_t          *sSearchPattern {nullptr};                                          /** Pattern to search for if any of the search options are set */
+static wchar_t          *sSearchPattern     {nullptr};                                      /** Pattern to search for if any of the search options are set */
 
 /**
  * @brief                   Returns whether a given command line option is set or not
@@ -146,11 +145,12 @@ clear_option (const uint8_t &pBit)
 [[nodiscard]] inline wchar_t
 *create_wchar (const char *pPtr)
 {
-    uint64_t    len;
-    wchar_t     *result {nullptr};
+    uint64_t    len;                                                                        /** Length of the string to convert to a wide string (including the null termination character) */
+    wchar_t     *result {nullptr};                                                          /** Resultant wide string after the conversion */
 
+    // calculate the length of the input string and allocate a wide string of the corresponding size
     len     = strnlen (pPtr, MAX_PATH_LEN);
-    result  = (wchar_t *)malloc (sizeof (wchar_t) * len);
+    result  = (wchar_t *)malloc (sizeof (wchar_t) * (len / sizeof (char)));
 
     if (result == nullptr) {
         fprintf (stderr,
@@ -516,20 +516,24 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
         sNumDirsRoot        += subdirCnt;
     }
 
+    // scanning is complete, now print the summary of the current directory
+
+    // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
     if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
 
+        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
         }
-
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
 
+        // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
             wprintf (L"%16llu    %-*c<%llu files>\n",
                         totalFileSize,
-                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
+                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
                         ' ',
                         regularFileCnt);
         }
@@ -542,16 +546,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
         }
 
     }
+    // if the current dir has some symlinks and the show symlinks option was not set (they were not displayed), then print the number of symlinks atleast
     if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
 
+        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
         }
-
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
 
+        // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
             wprintf (L"%16c    %-*c<%llu symlinks>\n",
                         '-',
@@ -568,16 +574,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
         }
 
     }
+    // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
     if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
 
+        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
         }
-
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
 
+        // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
             wprintf (L"%16c    %-*c<%llu special entries>\n",
                         '-',
@@ -595,6 +603,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
     }
 }
 
+/**
+ * @brief
+ *
+ * @param pPath
+ */
 void scan_path_init (const wchar_t *pPath)
 {
     scan_path (pPath, 0);
