@@ -42,34 +42,61 @@ namespace fs                    = std::filesystem;
 namespace chrono                = std::chrono;
 
 /** Usage instructions of the program */
-static const char       *usage  = "Usage: %s [PATH] [options]\n"
-                           "Scan through the filesystem starting from PATH.\n"
-                           "\n"
-                           "Example: %s \"..\" --recursive --files\n"
-                           "\n"
-                           "Options:\n"
-                           "-r, --recursive             Recursively go through directories\n"
-                           "-p, --permissions           Show Permissions of each entry\n"
-                           "-t, --modification-time     Show Time of Last Modification\n"
-                           "\n"
-                           "    --abs-noindent          Show the complete absoulute path without indentation\n"
-                           "    --rel-noindent          Show the relative path without indentation\n"
-                           "\n"
-                           "-f, --files                 Show Regular Files (normally hidden)\n"
-                           "-l, --symlinks              Show Symlinks\n"
-                           "-s, --special               Show Special Files such as sockets, pipes, etc. (normally hidden)\n"
-                           "\n"
-                           "-S, --search                Only log those entries whose name matches exactly with the given string. (normally hidden)\n"
-                           "    --search-noext          Only log those entries whose name (excluding extension) matches exactly with the given string. (normally hidden)\n"
-                           "    --contains              Only log those entries whose name contains the given string. (normally hidden)\n"
-                           "\n"
-                           "-h, --help                  Print Usage Instructions\n"
-                           "\n";
+static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
+                                    L"Scan through the filesystem starting from PATH.\n"
+                                    L"\n"
+                                    L"Example: %s \"..\" --recursive --files\n"
+                                    L"\n"
+                                    L"Options:\n"
+                                    L"-r, --recursive             Recursively go through directories\n"
+                                    L"-p, --permissions           Show Permissions of each entry\n"
+                                    L"-t, --modification-time     Show Time of Last Modification\n"
+                                    L"\n"
+                                    L"    --abs-noindent          Show the complete absoulute path without indentation\n"
+                                    L"    --rel-noindent          Show the relative path without indentation\n"
+                                    L"\n"
+                                    L"-f, --files                 Show Regular Files (normally hidden)\n"
+                                    L"-l, --symlinks              Show Symlinks\n"
+                                    L"-s, --special               Show Special Files such as sockets, pipes, etc. (normally hidden)\n"
+                                    L"\n"
+                                    L"-S, --search                Only log those entries whose name matches exactly with the given string. (normally hidden)\n"
+                                    L"    --search-noext          Only log those entries whose name (excluding extension) matches exactly with the given string. (normally hidden)\n"
+                                    L"    --contains              Only log those entries whose name contains the given string. (normally hidden)\n"
+                                    L"\n"
+                                    L"-h, --help                  Print Usage Instructions\n"
+                                    L"\n";
+
+/** Unformatted summary string */
+static const wchar_t    *summary    = L"\n"
+                                    L"Summary of \"%ls\"\n"
+                                    L"<%lu files>\n"
+                                    L"<%lu symlinks>\n"
+                                    L"<%lu special files>\n"
+                                    L"<%lu subdirectories>\n"
+                                    L"<%lu total entries>\n"
+                                    L"\n"
+                                    L"Including subdirectories\n"
+                                    L"<%lu files>\n"
+                                    L"<%lu symlinks>\n"
+                                    L"<%lu special files>\n"
+                                    L"<%lu subdirectories>\n"
+                                    L"<%lu total entries>\n"
+                                    L"\n";
 
 static uint64_t         sOptionMask {};                                                     /** Bitmask to represent command line options provided by the user */
 static std::error_code  sErrorCode {};                                                      /** Container for error code to be passed around when dealing with std::filesystem artifacts */
 
 static uint64_t         sRecursionLevel {};                                                 /** Number of levels of directories to go within if the recursive option is set */
+
+static uint64_t         sNumFilesTotal {};
+static uint64_t         sNumSymlinksTotal {};
+static uint64_t         sNumSpecialTotal {};
+static uint64_t         sNumDirsTotal {};
+
+static uint64_t         sNumFilesRoot {};
+static uint64_t         sNumSymlinksRoot {};
+static uint64_t         sNumSpecialRoot {};
+static uint64_t         sNumDirsRoot {};
 
 static wchar_t          *sSearchPattern {nullptr};                                          /** Pattern to search for if any of the search options are set */
 
@@ -211,7 +238,7 @@ print_last_modif_time (const fs::directory_entry &pFsEntry)
 void
 print_permissions (const fs::file_status &pEntryStatus)
 {
-    fs::perms       entryPerms;                                                     /** Permissions of the current entry */
+    static fs::perms            entryPerms;                                                 /** Permissions of the current entry */
     entryPerms      = pEntryStatus.permissions ();
 
     wprintf (L"%c%c%c%c%c%c%c%c%c   ",
@@ -268,6 +295,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
 
     uint64_t                specialCnt;                                                     /** Number of special files in the current directory */
 
+    uint64_t                subdirCnt;                                                      /** Number of sub-directories in the current directory */
+
     fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
 
     fs::path                filepath;                                                       /** Name of the current entry */
@@ -289,6 +318,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
     regularFileCnt      = 0;
     symlinkCnt          = 0;
     specialCnt          = 0;
+    subdirCnt           = 0;
     totalFileSize       = 0;
 
     // iterate through all the files in the current path
@@ -437,6 +467,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
         }
         else if (isDir) {
 
+            ++subdirCnt;
+
             if (get_option (SHOW_PERMISSIONS)) {
                 print_permissions (entryStatus);
             }
@@ -470,6 +502,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
             printf ("Terminating...\n");
             exit (-1);
         }
+    }
+
+    sNumFilesTotal      += regularFileCnt;
+    sNumSymlinksTotal   += symlinkCnt;
+    sNumSpecialTotal    += specialCnt;
+    sNumDirsTotal       += subdirCnt;
+
+    if (pLevel == 0) {
+        sNumFilesRoot       += regularFileCnt;
+        sNumSymlinksRoot    += symlinkCnt;
+        sNumSpecialRoot     += specialCnt;
+        sNumDirsRoot        += subdirCnt;
     }
 
     if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
@@ -548,8 +592,30 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                         ' ',
                         specialCnt);
         }
-
     }
+}
+
+void scan_path_init (const wchar_t *pPath)
+{
+    scan_path (pPath, 0);
+    wprintf (summary,
+                pPath,
+                sNumFilesRoot,
+                sNumSymlinksRoot,
+                sNumSpecialRoot,
+                sNumDirsRoot,
+                sNumFilesRoot +
+                sNumSymlinksRoot +
+                sNumSpecialRoot +
+                sNumDirsRoot,
+                sNumFilesTotal,
+                sNumSymlinksTotal,
+                sNumSpecialTotal,
+                sNumDirsTotal,
+                sNumFilesTotal +
+                sNumSymlinksTotal +
+                sNumSpecialTotal +
+                sNumDirsTotal);
 }
 
 int main (int argc, char *argv[])
@@ -813,7 +879,7 @@ int main (int argc, char *argv[])
 
     // print the usage instructions and terminate
     if (get_option (HELP)) {
-        printf (usage, argv[0]);
+        wprintf (usage, argv[0]);
         return 0;
     }
 
@@ -826,7 +892,8 @@ int main (int argc, char *argv[])
     // only proceed if the path exists and is a directory, else report it to the user and exit the program
     if (fs::exists (initPathWstr)) {
         if (fs::is_directory (initPathWstr)) {
-            scan_path (initPathWstr, 0);
+            // scan_path (initPathWstr, 0);
+            scan_path_init (initPathWstr);
         }
         else {
             wprintf (L"The given path is not to a directory\n");
