@@ -213,7 +213,7 @@ print_last_modif_time (const fs::directory_entry &pFsEntry)
         fwprintf (stderr,
                     L"Error Code: %4d\n",
                     sErrorCode.value ());
-        fwprintf (stderr, L"%s\n", sErrorCode.message ());
+        fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
         wprintf (L"%20c", ' ');
     }
     // format the time and print it
@@ -303,6 +303,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
 
     const char              *specialEntryType;                                              /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
 
+    fs::path                targetPath;                                                     /** Stores the path to the target of the symlink if the entry is a symlink */
     std::wstring            targetName;                                                     /** Stores the target of the symlink if the entry is a symlink*/
 
     // if an error occoured while trying to get the directory iterator, then report it here
@@ -311,7 +312,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                     L"Error while creating directory iterator for path \"%ls\"\n",
                     pPath);
         fwprintf (stderr, L"Error Code: %4d\n", sErrorCode.value ());
-        fwprintf (stderr, L"%s\n", sErrorCode.message ());
+        fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
     }
 
     // initialize all counters to 0
@@ -345,7 +346,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                 fwprintf (stderr,
                             L"Error Code: %4d\n",
                             sErrorCode.value ());
-                fwprintf (stderr, L"%s\n", sErrorCode.message ());
+                fwprintf (stderr, L"Error message: %s\n", sErrorCode.message ().c_str ());
             }
         }
         else if (get_option (SHOW_RELNOINDENT)) {
@@ -362,7 +363,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                     fwprintf (stderr,
                                 L"Error Code: %4d\n",
                                 sErrorCode.value ());
-                    fwprintf (stderr, L"%s\n", sErrorCode.message ());
+                    fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
                 }
             }
         }
@@ -379,21 +380,35 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                     wprintf (L"%20c", '-');
                 }
 
-                targetName  = fs::read_symlink (entry).wstring ();
+                targetPath  = fs::read_symlink (entry, sErrorCode);
 
-                if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                    wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
-                                "SYMLINK",
-                                filepath.wstring ().c_str (),
-                                targetName.c_str ());
+                if (sErrorCode.value () != 0) {
+                    fwprintf (stderr,
+                                L"Error while reading target of symlink \"%ls\"\n",
+                                filepath.wstring ().c_str ());
+                    fwprintf (stderr,
+                                L"Error Code: %4d\n",
+                                sErrorCode.value ());
+                    fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
                 }
                 else {
-                    wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
-                                "SYMLINK",
-                                indentWidth,
-                                ' ',
-                                filepath.filename ().wstring ().c_str (),
-                                targetName.c_str ());
+
+                    targetName  = targetPath.wstring ();
+
+                    if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                        wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
+                                    "SYMLINK",
+                                    filepath.wstring ().c_str (),
+                                    targetName.c_str ());
+                    }
+                    else {
+                        wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
+                                    "SYMLINK",
+                                    indentWidth,
+                                    ' ',
+                                    filepath.filename ().wstring ().c_str (),
+                                    targetName.c_str ());
+                    }
                 }
             }
         }
