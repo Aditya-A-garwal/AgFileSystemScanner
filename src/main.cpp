@@ -97,6 +97,8 @@ static uint64_t         sNumSymlinksRoot    {};                                 
 static uint64_t         sNumSpecialRoot     {};                                             /** Number of special files traversed in the root directory */
 static uint64_t         sNumDirsRoot        {};                                             /** Number of subdirectories in the root directory */
 
+static bool             sPrintSummary       {};                                             /** Flag to determine whether the summary should be printed or not */
+
 static wchar_t          *sSearchPattern     {nullptr};                                      /** Pattern to search for if any of the search options are set */
 
 /**
@@ -108,7 +110,7 @@ static wchar_t          *sSearchPattern     {nullptr};                          
  * @return false            If the given option is cleared
  */
 [[nodiscard]] inline bool
-get_option (const uint8_t &pBit)
+get_option (const uint8_t &pBit) noexcept
 {
     return (sOptionMask & (1ULL << pBit)) != 0;
 }
@@ -119,7 +121,7 @@ get_option (const uint8_t &pBit)
  * @param pBit              Option to clear
  */
 inline void
-set_option (const uint8_t &pBit)
+set_option (const uint8_t &pBit) noexcept
 {
     sOptionMask |= (1ULL << pBit);
 }
@@ -130,7 +132,7 @@ set_option (const uint8_t &pBit)
  * @param pBit              Option to clear
  */
 inline void
-clear_option (const uint8_t &pBit)
+clear_option (const uint8_t &pBit) noexcept
 {
     sOptionMask &= ~(1ULL << pBit);
 }
@@ -143,7 +145,7 @@ clear_option (const uint8_t &pBit)
  * @return wchar_t*         Given String as a wide string
  */
 [[nodiscard]] inline wchar_t
-*create_wchar (const char *pPtr)
+*create_wchar (const char *pPtr) noexcept
 {
     uint64_t    len;                                                                        /** Length of the string to convert to a wide string (including the null termination character) */
     wchar_t     *result {nullptr};                                                          /** Resultant wide string after the conversion */
@@ -178,7 +180,7 @@ clear_option (const uint8_t &pBit)
  * @return false            If the conversion failed
  */
 bool
-parse_str_to_uint64 (const char *pPtr, uint64_t &pRes)
+parse_str_to_uint64 (const char *pPtr, uint64_t &pRes) noexcept
 {
     for (; *pPtr != 0; ++pPtr) {
         if (*pPtr < '0' || *pPtr > '9') {
@@ -196,7 +198,7 @@ parse_str_to_uint64 (const char *pPtr, uint64_t &pRes)
  * @param pFsEntry          Reference to entry whose last modification time is to be printed
  */
 void
-print_last_modif_time (const fs::directory_entry &pFsEntry)
+print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
 {
     static fs::file_time_type   lastModifTpFs;                                              /** Time point when the given entry was last modified */
     static time_t               lastModifTime;                                              /** Time point when the given entry was last modified as a time_t instance */
@@ -236,7 +238,7 @@ print_last_modif_time (const fs::directory_entry &pFsEntry)
  * @param pEntryStatus      Reference to the status of the entry whose permissions need to be printed
  */
 void
-print_permissions (const fs::file_status &pEntryStatus)
+print_permissions (const fs::file_status &pEntryStatus) noexcept
 {
     static fs::perms            entryPerms;                                                 /** Permissions of the current entry */
     entryPerms      = pEntryStatus.permissions ();
@@ -261,7 +263,7 @@ print_permissions (const fs::file_status &pEntryStatus)
  * @param pLevel            The number of recursive calls of this function before the current one
  */
 void
-scan_path (const wchar_t *pPath, const uint64_t &pLevel)
+scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 {
     const uint64_t      indentWidth     = INDENT_COL_WIDTH * pLevel;                        /** Number of spaces to enter before printing the entry for the current function call */
 
@@ -271,12 +273,14 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
         std::exit (-1);
     }
 
-    // the path must exist (FIND A WAY TO FREE THE STINGS ALLOCATED IN MAIN)
-    if (fs::exists (pPath) == false) {
-        wprintf (L"The Given Path \"%ls\" does not exist\n", pPath);
-        wprintf (L"Terminating...\n");
-        std::exit (-1);
-    }
+    // if (fs::exists (pPath) == false) {
+    //     wprintf (L"Directory \"%ls\" does not exist\n", pPath);
+
+    //     return;
+    //     // wprintf (L"The Given Path \"%ls\" does not exist\n", pPath);
+    //     // wprintf (L"Terminating...\n");
+    //     // std::exit (-1);
+    // }
 
     fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
     fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
@@ -313,6 +317,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                     pPath);
         fwprintf (stderr, L"Error Code: %4d\n", sErrorCode.value ());
         fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
+
+        if (pLevel == 0) {
+            sPrintSummary   = false;
+        }
+
+        return;
     }
 
     // initialize all counters to 0
@@ -415,7 +425,23 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
         else if (isFile) {
             ++regularFileCnt;
 
-            curFileSize     = fs::file_size (entry);
+            // curFileSize     = fs::file_size (entry, sErrorCode);
+            curFileSize     = fs::file_size (entry, sErrorCode);
+
+            if (sErrorCode.value () != 0) {
+                fwprintf (stderr,
+                            L"Error while reading size of file \"%ls\"\n",
+                            filepath.wstring ().c_str ());
+                fwprintf (stderr,
+                            L"Error Code: %4d\n",
+                            sErrorCode.value ());
+                fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
+
+                // if the size can not be read, set the isFile flag to false to indicate a failed read
+                curFileSize = 0;
+                isFile      = false;
+            }
+
             totalFileSize   += curFileSize;
 
             if (get_option (SHOW_FILES)) {
@@ -429,13 +455,13 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
                 }
 
                 if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
-                    wprintf (L"%16llu    %ls\n",
-                                curFileSize,
+                    wprintf (L"%16lld    %ls\n",
+                                (isFile) ? (curFileSize) : (-1),
                                 filepath.wstring ().c_str ());
                 }
                 else {
-                    wprintf (L"%16llu    %-*c%ls\n",
-                                curFileSize,
+                    wprintf (L"%16lld    %-*c%ls\n",
+                                (isFile) ? (curFileSize) : (-1),
                                 indentWidth,
                                 ' ',
                                 filepath.filename ().wstring ().c_str ());
@@ -623,9 +649,16 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel)
  *
  * @param pPath
  */
-void scan_path_init (const wchar_t *pPath)
+void scan_path_init (const wchar_t *pPath) noexcept
 {
+    sPrintSummary   = true;
+
     scan_path (pPath, 0);
+
+    if (!sPrintSummary) {
+        return;
+    }
+
     wprintf (summary,
                 pPath,
                 sNumFilesRoot,
@@ -646,7 +679,7 @@ void scan_path_init (const wchar_t *pPath)
                 sNumDirsTotal);
 }
 
-int main (int argc, char *argv[])
+int main (int argc, char *argv[]) noexcept
 {
     const char          *initPathStr;                                                       /** Path to start the scan process from, represneted as a string of chars */
     wchar_t             *initPathWstr;                                                      /** Path to start the scan process from, represented as a string of wide characters */
@@ -917,21 +950,8 @@ int main (int argc, char *argv[])
     // if a search pattern was provided, then convert it to a wide string
     sSearchPattern      = (searchPattern == nullptr) ? (nullptr) : (create_wchar (searchPattern));
 
-    // only proceed if the path exists and is a directory, else report it to the user and exit the program
-    if (fs::exists (initPathWstr)) {
-        if (fs::is_directory (initPathWstr)) {
-            // scan_path (initPathWstr, 0);
-            scan_path_init (initPathWstr);
-        }
-        else {
-            wprintf (L"The given path is not to a directory\n");
-            wprintf (L"Terminating...\n");
-        }
-    }
-    else {
-        wprintf (L"The given Path \"%ls\" does not exist\n", initPathWstr);
-        wprintf (L"Terminating...\n");
-    }
+    // scan_path (initPathWstr, 0);
+    scan_path_init (initPathWstr);
 
     free (initPathWstr);
     free (sSearchPattern);
