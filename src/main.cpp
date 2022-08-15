@@ -262,8 +262,8 @@ print_permissions (const fs::file_status &pEntryStatus) noexcept
  * @param pPath             Path to the directory to scan
  * @param pLevel            The number of recursive calls of this function before the current one
  */
-template <bool isFirstCall, bool showPerms, bool showTime, bool absNoIndent, bool relNoIndent>
-void
+template <bool isFirstCall, bool showPerms, bool showTime, bool absNoIndent, bool relNoIndent, bool sizeOnly>
+uint64_t
 scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 {
     const uint64_t      indentWidth     = INDENT_COL_WIDTH * pLevel;                        /** Number of spaces to enter before printing the entry for the current function call */
@@ -282,6 +282,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     bool                    isFile;                                                         /** Stores whether the current entry is a regular file */
     bool                    isSymlink;                                                      /** Stores whether the current entry is a symlink */
     bool                    isSpecial;                                                      /** Stores whether the current entry is a special file */
+
+    uint64_t                totalDirSize;                                                   /** Stores the total size of this entry */
 
     uint64_t                regularFileCnt;                                                 /** Number of regular files within this directory */
     uint64_t                totalFileSize;                                                  /** Combines sizes of all files within this directory */
@@ -314,10 +316,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             sPrintSummary   = false;
         }
 
-        return;
+        return 0;
     }
 
     // initialize all counters to 0
+    totalDirSize        = 0;
     regularFileCnt      = 0;
     symlinkCnt          = 0;
     specialCnt          = 0;
@@ -338,88 +341,88 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         isSymlink       = entry.is_symlink ();
         isSpecial       = entry.is_other ();
 
-        // if (get_option (SHOW_ABSNOINDENT)) {
-        if constexpr (absNoIndent) {
-            // filepath    = fs::absolute (filepath);
-            filepath    = fs::canonical (filepath, sErrorCode);
-            if (sErrorCode.value () != 0) {
-                fwprintf (stderr,
-                            L"Error while converting filepath to canonical value for \"%ls\"\n",
-                            filepath.wstring ().c_str ());
-                fwprintf (stderr,
-                            L"Error Code: %4d\n",
-                            sErrorCode.value ());
-                fwprintf (stderr, L"Error message: %s\n", sErrorCode.message ().c_str ());
-            }
-        }
-        // else if (get_option (SHOW_RELNOINDENT)) {
-        else if constexpr (relNoIndent) {
-
-            if (isSymlink) {
-                filepath    = filepath.filename ();
-            }
-            else {
-                filepath    = fs::relative (filepath, sErrorCode);
+        if constexpr (!sizeOnly) {
+            if constexpr (absNoIndent) {
+                // filepath    = fs::absolute (filepath);
+                filepath    = fs::canonical (filepath, sErrorCode);
                 if (sErrorCode.value () != 0) {
                     fwprintf (stderr,
-                                L"Error while converting filepath to relative value for \"%ls\"\n",
+                                L"Error while converting filepath to canonical value for \"%ls\"\n",
                                 filepath.wstring ().c_str ());
                     fwprintf (stderr,
                                 L"Error Code: %4d\n",
                                 sErrorCode.value ());
-                    fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
+                    fwprintf (stderr, L"Error message: %s\n", sErrorCode.message ().c_str ());
+                }
+            }
+            else if constexpr (relNoIndent) {
+
+                if (isSymlink) {
+                    filepath    = filepath.filename ();
+                }
+                else {
+                    filepath    = fs::relative (filepath, sErrorCode);
+                    if (sErrorCode.value () != 0) {
+                        fwprintf (stderr,
+                                    L"Error while converting filepath to relative value for \"%ls\"\n",
+                                    filepath.wstring ().c_str ());
+                        fwprintf (stderr,
+                                    L"Error Code: %4d\n",
+                                    sErrorCode.value ());
+                        fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
+                    }
                 }
             }
         }
 
         if (isSymlink) {
-            ++symlinkCnt;
+            if constexpr (!sizeOnly) {
+                ++symlinkCnt;
 
-            // if (get_option (SHOW_SYMLINKS)) {
-            if (get_option (SHOW_SYMLINKS)) {
-                if constexpr (showPerms) {
-                    print_permissions (entryStatus);
-                }
+                if (get_option (SHOW_SYMLINKS)) {
+                    if constexpr (showPerms) {
+                        print_permissions (entryStatus);
+                    }
 
-                if constexpr (showTime) {
-                    wprintf (L"%20c", '-');
-                }
+                    if constexpr (showTime) {
+                        wprintf (L"%20c", '-');
+                    }
 
-                targetPath  = fs::read_symlink (entry, sErrorCode);
+                    targetPath  = fs::read_symlink (entry, sErrorCode);
 
-                if (sErrorCode.value () != 0) {
-                    fwprintf (stderr,
-                                L"Error while reading target of symlink \"%ls\"\n",
-                                filepath.wstring ().c_str ());
-                    fwprintf (stderr,
-                                L"Error Code: %4d\n",
-                                sErrorCode.value ());
-                    fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
-                }
-                else {
-
-                    targetName  = targetPath.wstring ();
-
-                    // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                    if constexpr (absNoIndent || relNoIndent) {
-                        wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
-                                    "SYMLINK",
-                                    filepath.wstring ().c_str (),
-                                    targetName.c_str ());
+                    if (sErrorCode.value () != 0) {
+                        fwprintf (stderr,
+                                    L"Error while reading target of symlink \"%ls\"\n",
+                                    filepath.wstring ().c_str ());
+                        fwprintf (stderr,
+                                    L"Error Code: %4d\n",
+                                    sErrorCode.value ());
+                        fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
                     }
                     else {
-                        wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
-                                    "SYMLINK",
-                                    indentWidth,
-                                    ' ',
-                                    filepath.filename ().wstring ().c_str (),
-                                    targetName.c_str ());
+
+                        targetName  = targetPath.wstring ();
+
+                        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                        if constexpr (absNoIndent || relNoIndent) {
+                            wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
+                                        "SYMLINK",
+                                        filepath.wstring ().c_str (),
+                                        targetName.c_str ());
+                        }
+                        else {
+                            wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
+                                        "SYMLINK",
+                                        indentWidth,
+                                        ' ',
+                                        filepath.filename ().wstring ().c_str (),
+                                        targetName.c_str ());
+                        }
                     }
                 }
             }
         }
         else if (isFile) {
-            ++regularFileCnt;
 
             // curFileSize     = fs::file_size (entry, sErrorCode);
             curFileSize     = fs::file_size (entry, sErrorCode);
@@ -428,7 +431,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 fwprintf (stderr,
                             L"Error while reading size of file \"%ls\"\n",
                             filepath.wstring ().c_str ());
-                fwprintf (stderr,
+     fwprintf (stderr,
                             L"Error Code: %4d\n",
                             sErrorCode.value ());
                 fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
@@ -439,8 +442,85 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             }
 
             totalFileSize   += curFileSize;
+            totalDirSize    += curFileSize;
 
-            if (get_option (SHOW_FILES)) {
+            if constexpr (!sizeOnly) {
+                ++regularFileCnt;
+                if (get_option (SHOW_FILES)) {
+
+                    if constexpr (showPerms) {
+                        print_permissions (entryStatus);
+                    }
+
+                    if constexpr (showTime) {
+                        print_last_modif_time (entry);
+                    }
+
+                    // if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
+                    if constexpr (absNoIndent || relNoIndent) {
+                        wprintf (L"%16lld    %ls\n",
+                                    (isFile) ? (curFileSize) : (-1),
+                                    filepath.wstring ().c_str ());
+                    }
+                    else {
+                        wprintf (L"%16lld    %-*c%ls\n",
+                                    (isFile) ? (curFileSize) : (-1),
+                                    indentWidth,
+                                    ' ',
+                                    filepath.filename ().wstring ().c_str ());
+                    }
+                }
+            }
+        }
+        else if (isSpecial) {
+            if constexpr (!sizeOnly) {
+
+                ++specialCnt;
+
+                if (get_option (SHOW_SPECIAL)) {
+                    specialEntryType    = "SPECIAL";
+
+                    if (entry.is_socket ()) {
+                        specialEntryType    = "SOCKET";
+                    }
+                    else if (entry.is_block_file ()) {
+                        specialEntryType    = "BLOCK DEVICE";
+                    }
+                    else if (entry.is_fifo ()) {
+                        specialEntryType    = "FIFO PIPE";
+                    }
+
+                    if constexpr (showPerms) {
+                        print_permissions (entryStatus);
+                    }
+
+                    if constexpr (showTime) {
+                        wprintf (L"%24c", ' ');
+                    }
+
+                    if constexpr (absNoIndent || relNoIndent) {
+                        wprintf (L"%16s    %ls\n",
+                                    specialEntryType,
+                                    filepath.wstring ().c_str ());
+                    }
+                    else {
+                        wprintf (L"%16s    %-*c%ls\n",
+                                    specialEntryType,
+                                    indentWidth,
+                                    ' ',
+                                    filepath.filename ().wstring ().c_str ());
+                    }
+                }
+            }
+        }
+        else if (isDir) {
+
+            ++subdirCnt;
+
+            curFileSize      = scan_path <false, false, false, false, false, true> (entry.path ().wstring ().c_str (), 1 + pLevel);
+            totalDirSize     += curFileSize;
+
+            if constexpr (!sizeOnly) {
 
                 if constexpr (showPerms) {
                     print_permissions (entryStatus);
@@ -450,89 +530,23 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     print_last_modif_time (entry);
                 }
 
-                // if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
                 if constexpr (absNoIndent || relNoIndent) {
-                    wprintf (L"%16lld    %ls\n",
-                                (isFile) ? (curFileSize) : (-1),
+                    wprintf (L"%16llu    <%ls>\n",
+                                curFileSize,
                                 filepath.wstring ().c_str ());
                 }
                 else {
-                    wprintf (L"%16lld    %-*c%ls\n",
-                                (isFile) ? (curFileSize) : (-1),
+                    wprintf (L"%16llu    %-*c<%ls>\n",
+                                curFileSize,
                                 indentWidth,
                                 ' ',
                                 filepath.filename ().wstring ().c_str ());
                 }
-            }
-        }
-        else if (isSpecial) {
-            ++specialCnt;
 
-            if (get_option (SHOW_SPECIAL)) {
-                specialEntryType    = "SPECIAL";
-
-                if (entry.is_socket ()) {
-                    specialEntryType    = "SOCKET";
-                }
-                else if (entry.is_block_file ()) {
-                    specialEntryType    = "BLOCK DEVICE";
-                }
-                else if (entry.is_fifo ()) {
-                    specialEntryType    = "FIFO PIPE";
-                }
-
-                if constexpr (showPerms) {
-                    print_permissions (entryStatus);
-                }
-
-                if constexpr (showTime) {
-                    wprintf (L"%24c", ' ');
-                }
-
-                // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                if constexpr (absNoIndent || relNoIndent) {
-                    wprintf (L"%16s    %ls\n",
-                                specialEntryType,
-                                filepath.wstring ().c_str ());
-                }
-                else {
-                    wprintf (L"%16s    %-*c%ls\n",
-                                specialEntryType,
-                                indentWidth,
-                                ' ',
-                                filepath.filename ().wstring ().c_str ());
-                }
-            }
-        }
-        else if (isDir) {
-
-            ++subdirCnt;
-
-            if constexpr (showPerms) {
-                print_permissions (entryStatus);
-            }
-
-            if constexpr (showTime) {
-                print_last_modif_time (entry);
-            }
-
-            // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-            if constexpr (absNoIndent || relNoIndent) {
-                wprintf (L"%16llu    <%ls>\n",
-                            0,
-                            filepath.wstring ().c_str ());
-            }
-            else {
-                wprintf (L"%16llu    %-*c<%ls>\n",
-                            0,
-                            indentWidth,
-                            ' ',
-                            filepath.filename ().wstring ().c_str ());
-            }
-
-            if (get_option (SHOW_RECURSIVE)) {
-                if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
-                    scan_path<false, showPerms, showTime, absNoIndent, relNoIndent> (entry.path ().wstring ().c_str (), 1 + pLevel);
+                if (get_option (SHOW_RECURSIVE)) {
+                    if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
+                        scan_path<false, showPerms, showTime, absNoIndent, relNoIndent, sizeOnly> (entry.path ().wstring ().c_str (), 1 + pLevel);
+                    }
                 }
             }
         }
@@ -556,94 +570,99 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         sNumDirsRoot        += subdirCnt;
     }
 
-    // scanning is complete, now print the summary of the current directory
+    // scanning is complete, now print the summary of the current directory if this function call was not for scanning
 
-    // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
-    if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
+    if constexpr (!sizeOnly) {
 
-        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-        if constexpr (showPerms) {
-            wprintf (L"            ");
-        }
-        if constexpr (showTime) {
-            wprintf (L"%20c", ' ');
-        }
+        // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
+        if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
 
-        // if either of the noindent options were set, then dont print the indentations for this directory
-        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-        if constexpr (absNoIndent || relNoIndent) {
-            wprintf (L"%16llu    %-*c<%llu files>\n",
-                        totalFileSize,
-                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
-                        ' ',
-                        regularFileCnt);
-        }
-        else {
-            wprintf (L"%16llu    %-*c<%llu files>\n",
-                        totalFileSize,
-                        indentWidth,
-                        ' ',
-                        regularFileCnt);
-        }
+            // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
+            if constexpr (showPerms) {
+                wprintf (L"            ");
+            }
+            if constexpr (showTime) {
+                wprintf (L"%20c", ' ');
+            }
 
+            // if either of the noindent options were set, then dont print the indentations for this directory
+            // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            if constexpr (absNoIndent || relNoIndent) {
+                wprintf (L"%16llu    %-*c<%llu files>\n",
+                            totalFileSize,
+                            (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
+                            ' ',
+                            regularFileCnt);
+            }
+            else {
+                wprintf (L"%16llu    %-*c<%llu files>\n",
+                            totalFileSize,
+                            indentWidth,
+                            ' ',
+                            regularFileCnt);
+            }
+
+        }
+        // if the current dir has some symlinks and the show symlinks option was not set (they were not displayed), then print the number of symlinks atleast
+        if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
+
+            // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
+            if constexpr (showPerms) {
+                wprintf (L"            ");
+            }
+            if constexpr (showTime) {
+                wprintf (L"%20c", ' ');
+            }
+
+            // if either of the noindent options were set, then dont print the indentations for this directory
+            // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            if constexpr (absNoIndent || relNoIndent) {
+                wprintf (L"%16c    %-*c<%llu symlinks>\n",
+                            '-',
+                            (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
+                            ' ',
+                            symlinkCnt);
+            }
+            else {
+                wprintf (L"%16c    %-*c<%llu symlinks>\n",
+                            '-',
+                            indentWidth,
+                            ' ',
+                            symlinkCnt);
+            }
+
+        }
+        // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
+        if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
+
+            // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
+            if constexpr (showPerms) {
+                wprintf (L"            ");
+            }
+            if constexpr (showTime) {
+                wprintf (L"%20c", ' ');
+            }
+
+            // if either of the noindent options were set, then dont print the indentations for this directory
+            // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            if constexpr (absNoIndent || relNoIndent) {
+                wprintf (L"%16c    %-*c<%llu special entries>\n",
+                            '-',
+                            (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
+                            ' ',
+                            specialCnt);
+            }
+            else {
+                wprintf (L"%16c    %-*c<%llu special entries>\n",
+                            '-',
+                            indentWidth,
+                            ' ',
+                            specialCnt);
+            }
+        }
     }
-    // if the current dir has some symlinks and the show symlinks option was not set (they were not displayed), then print the number of symlinks atleast
-    if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
 
-        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-        if constexpr (showPerms) {
-            wprintf (L"            ");
-        }
-        if constexpr (showTime) {
-            wprintf (L"%20c", ' ');
-        }
-
-        // if either of the noindent options were set, then dont print the indentations for this directory
-        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-        if constexpr (absNoIndent || relNoIndent) {
-            wprintf (L"%16c    %-*c<%llu symlinks>\n",
-                        '-',
-                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
-                        ' ',
-                        symlinkCnt);
-        }
-        else {
-            wprintf (L"%16c    %-*c<%llu symlinks>\n",
-                        '-',
-                        indentWidth,
-                        ' ',
-                        symlinkCnt);
-        }
-
-    }
-    // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
-    if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
-
-        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-        if constexpr (showPerms) {
-            wprintf (L"            ");
-        }
-        if constexpr (showTime) {
-            wprintf (L"%20c", ' ');
-        }
-
-        // if either of the noindent options were set, then dont print the indentations for this directory
-        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-        if constexpr (absNoIndent || relNoIndent) {
-            wprintf (L"%16c    %-*c<%llu special entries>\n",
-                        '-',
-                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
-                        ' ',
-                        specialCnt);
-        }
-        else {
-            wprintf (L"%16c    %-*c<%llu special entries>\n",
-                        '-',
-                        indentWidth,
-                        ' ',
-                        specialCnt);
-        }
-    }
+    return totalDirSize;
 }
 
 /**
@@ -660,36 +679,36 @@ scan_path_init (const wchar_t *pPath) noexcept
         if (get_option (SHOW_LASTTIME)) {
             if (get_option (SHOW_ABSNOINDENT)) {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, true, true, true, true> (pPath, 0);
+                    scan_path<true, true, true, true, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, true, true, true, false> (pPath, 0);
+                    scan_path<true, true, true, true, false, false> (pPath, 0);
                 }
             }
             else {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, true, true, false, true> (pPath, 0);
+                    scan_path<true, true, true, false, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, true, true, false, false> (pPath, 0);
+                    scan_path<true, true, true, false, false, false> (pPath, 0);
                 }
             }
         }
         else {
             if (get_option (SHOW_ABSNOINDENT)) {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, true, false, true, true> (pPath, 0);
+                    scan_path<true, true, false, true, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, true, false, true, false> (pPath, 0);
+                    scan_path<true, true, false, true, false, false> (pPath, 0);
                 }
             }
             else {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, true, false, false, true> (pPath, 0);
+                    scan_path<true, true, false, false, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, true, false, false, false> (pPath, 0);
+                    scan_path<true, true, false, false, false, false> (pPath, 0);
                 }
             }
         }
@@ -698,36 +717,36 @@ scan_path_init (const wchar_t *pPath) noexcept
         if (get_option (SHOW_LASTTIME)) {
             if (get_option (SHOW_ABSNOINDENT)) {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, false, true, true, true> (pPath, 0);
+                    scan_path<true, false, true, true, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, false, true, true, false> (pPath, 0);
+                    scan_path<true, false, true, true, false, false> (pPath, 0);
                 }
             }
             else {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, false, true, false, true> (pPath, 0);
+                    scan_path<true, false, true, false, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, false, true, false, false> (pPath, 0);
+                    scan_path<true, false, true, false, false, false> (pPath, 0);
                 }
             }
         }
         else {
             if (get_option (SHOW_ABSNOINDENT)) {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, false, false, true, true> (pPath, 0);
+                    scan_path<true, false, false, true, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, false, false, true, false> (pPath, 0);
+                    scan_path<true, false, false, true, false, false> (pPath, 0);
                 }
             }
             else {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, false, false, false, true> (pPath, 0);
+                    scan_path<true, false, false, false, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, false, false, false, false> (pPath, 0);
+                    scan_path<true, false, false, false, false, false> (pPath, 0);
                 }
             }
         }
