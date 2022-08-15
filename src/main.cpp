@@ -28,8 +28,9 @@
 #define SEARCH_EXACT            (8)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */ //! UNUSED
 #define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */ //! UNUSED
 #define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
+#define NO_DIR_SIZE             (12)                                                        /** Option that specifies if directory sizes should not be shown */
 
-#define HELP                    (11)                                                        /** Option that specified if usage instructions need to be printed */
+#define HELP                    (13)                                                        /** Option that specifies if usage instructions need to be printed */
 
 #define MAX_ARG_LEN             (32)                                                        /** Maximum allowed length of an argument (other than the path) after which it is not checked further */
 #define MAX_PATH_LEN            (256)                                                       /** Maximum allowed length of the provided path after which any further characters are ignored */
@@ -63,18 +64,21 @@ static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
                                     L"    --contains              Only log those entries whose name contains the given string. (normally hidden)\n"
                                     L"\n"
                                     L"-h, --help                  Print Usage Instructions\n"
+                                    L"    --no-dir-size           Do not show directory sizes\n"
                                     L"\n";
 
-/** Unformatted summary string */
-static const wchar_t    *summary    = L"\n"
+/** Unformatted summary string for directory to traverse (not including subdirectories) */
+static const wchar_t    *rootSum    = L"\n"
                                     L"Summary of \"%ls\"\n"
                                     L"<%lu files>\n"
                                     L"<%lu symlinks>\n"
                                     L"<%lu special files>\n"
                                     L"<%lu subdirectories>\n"
                                     L"<%lu total entries>\n"
-                                    L"\n"
-                                    L"Including subdirectories\n"
+                                    L"\n";
+
+/** Unformatted summary string for the directory to traverse (including subdirectories) */
+static const wchar_t    *recSum     = L"Including subdirectories\n"
                                     L"<%lu files>\n"
                                     L"<%lu symlinks>\n"
                                     L"<%lu special files>\n"
@@ -517,7 +521,13 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             ++subdirCnt;
 
-            curFileSize      = scan_path <false, false, false, false, false, true> (entry.path ().wstring ().c_str (), 1 + pLevel);
+            if (get_option (NO_DIR_SIZE)) {
+                curFileSize = 0;
+            }
+            else {
+                curFileSize      = scan_path <false, false, false, false, false, true> (entry.path ().wstring ().c_str (), 1 + pLevel);
+            }
+
             totalDirSize     += curFileSize;
 
             if constexpr (!sizeOnly) {
@@ -756,7 +766,7 @@ scan_path_init (const wchar_t *pPath) noexcept
         return;
     }
 
-    wprintf (summary,
+    wprintf (rootSum,
                 pPath,
                 sNumFilesRoot,
                 sNumSymlinksRoot,
@@ -765,15 +775,19 @@ scan_path_init (const wchar_t *pPath) noexcept
                 sNumFilesRoot +
                 sNumSymlinksRoot +
                 sNumSpecialRoot +
-                sNumDirsRoot,
-                sNumFilesTotal,
-                sNumSymlinksTotal,
-                sNumSpecialTotal,
-                sNumDirsTotal,
-                sNumFilesTotal +
-                sNumSymlinksTotal +
-                sNumSpecialTotal +
-                sNumDirsTotal);
+                sNumDirsRoot);
+
+    if (get_option (SHOW_RECURSIVE)) {
+        wprintf (recSum,
+                    sNumFilesTotal,
+                    sNumSymlinksTotal,
+                    sNumSpecialTotal,
+                    sNumDirsTotal,
+                    sNumFilesTotal +
+                    sNumSymlinksTotal +
+                    sNumSpecialTotal +
+                    sNumDirsTotal);
+    }
 }
 
 int
@@ -971,6 +985,9 @@ main (int argc, char *argv[]) noexcept
         case 13:
             if (strncmp (argv[i], "--permissions", 13) == 0) {
                 set_option (SHOW_PERMISSIONS);
+            }
+            else if (strncmp (argv[i], "--no-dir-size", 13) == 0) {
+                set_option (NO_DIR_SIZE);
             }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
