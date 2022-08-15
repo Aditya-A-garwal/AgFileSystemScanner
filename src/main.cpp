@@ -262,6 +262,7 @@ print_permissions (const fs::file_status &pEntryStatus) noexcept
  * @param pPath             Path to the directory to scan
  * @param pLevel            The number of recursive calls of this function before the current one
  */
+template <bool isFirstCall, bool showPerms, bool showTime, bool absNoIndent, bool relNoIndent>
 void
 scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 {
@@ -272,15 +273,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         fwprintf (stderr, L"Path can not point to NULL\n");
         std::exit (-1);
     }
-
-    // if (fs::exists (pPath) == false) {
-    //     wprintf (L"Directory \"%ls\" does not exist\n", pPath);
-
-    //     return;
-    //     // wprintf (L"The Given Path \"%ls\" does not exist\n", pPath);
-    //     // wprintf (L"Terminating...\n");
-    //     // std::exit (-1);
-    // }
 
     fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
     fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
@@ -318,7 +310,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         fwprintf (stderr, L"Error Code: %4d\n", sErrorCode.value ());
         fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
 
-        if (pLevel == 0) {
+        if constexpr (isFirstCall) {
             sPrintSummary   = false;
         }
 
@@ -346,7 +338,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         isSymlink       = entry.is_symlink ();
         isSpecial       = entry.is_other ();
 
-        if (get_option (SHOW_ABSNOINDENT)) {
+        // if (get_option (SHOW_ABSNOINDENT)) {
+        if constexpr (absNoIndent) {
             // filepath    = fs::absolute (filepath);
             filepath    = fs::canonical (filepath, sErrorCode);
             if (sErrorCode.value () != 0) {
@@ -359,7 +352,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 fwprintf (stderr, L"Error message: %s\n", sErrorCode.message ().c_str ());
             }
         }
-        else if (get_option (SHOW_RELNOINDENT)) {
+        // else if (get_option (SHOW_RELNOINDENT)) {
+        else if constexpr (relNoIndent) {
 
             if (isSymlink) {
                 filepath    = filepath.filename ();
@@ -381,12 +375,13 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         if (isSymlink) {
             ++symlinkCnt;
 
+            // if (get_option (SHOW_SYMLINKS)) {
             if (get_option (SHOW_SYMLINKS)) {
-                if (get_option (SHOW_PERMISSIONS)) {
+                if constexpr (showPerms) {
                     print_permissions (entryStatus);
                 }
 
-                if (get_option (SHOW_LASTTIME)) {
+                if constexpr (showTime) {
                     wprintf (L"%20c", '-');
                 }
 
@@ -405,7 +400,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
                     targetName  = targetPath.wstring ();
 
-                    if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                    // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                    if constexpr (absNoIndent || relNoIndent) {
                         wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
                                     "SYMLINK",
                                     filepath.wstring ().c_str (),
@@ -446,15 +442,16 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             if (get_option (SHOW_FILES)) {
 
-                if (get_option (SHOW_PERMISSIONS)) {
+                if constexpr (showPerms) {
                     print_permissions (entryStatus);
                 }
 
-                if (get_option (SHOW_LASTTIME)) {
+                if constexpr (showTime) {
                     print_last_modif_time (entry);
                 }
 
-                if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
+                // if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
+                if constexpr (absNoIndent || relNoIndent) {
                     wprintf (L"%16lld    %ls\n",
                                 (isFile) ? (curFileSize) : (-1),
                                 filepath.wstring ().c_str ());
@@ -484,15 +481,16 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     specialEntryType    = "FIFO PIPE";
                 }
 
-                if (get_option (SHOW_PERMISSIONS)) {
+                if constexpr (showPerms) {
                     print_permissions (entryStatus);
                 }
 
-                if (get_option (SHOW_LASTTIME)) {
+                if constexpr (showTime) {
                     wprintf (L"%24c", ' ');
                 }
 
-                if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                if constexpr (absNoIndent || relNoIndent) {
                     wprintf (L"%16s    %ls\n",
                                 specialEntryType,
                                 filepath.wstring ().c_str ());
@@ -510,15 +508,16 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             ++subdirCnt;
 
-            if (get_option (SHOW_PERMISSIONS)) {
+            if constexpr (showPerms) {
                 print_permissions (entryStatus);
             }
 
-            if (get_option (SHOW_LASTTIME)) {
+            if constexpr (showTime) {
                 print_last_modif_time (entry);
             }
 
-            if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            if constexpr (absNoIndent || relNoIndent) {
                 wprintf (L"%16llu    <%ls>\n",
                             0,
                             filepath.wstring ().c_str ());
@@ -533,7 +532,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             if (get_option (SHOW_RECURSIVE)) {
                 if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
-                    scan_path (entry.path ().wstring ().c_str (), 1 + pLevel);
+                    scan_path<false, showPerms, showTime, absNoIndent, relNoIndent> (entry.path ().wstring ().c_str (), 1 + pLevel);
                 }
             }
         }
@@ -563,15 +562,16 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
 
         // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-        if (get_option (SHOW_PERMISSIONS)) {
+        if constexpr (showPerms) {
             wprintf (L"            ");
         }
-        if (get_option (SHOW_LASTTIME)) {
+        if constexpr (showTime) {
             wprintf (L"%20c", ' ');
         }
 
         // if either of the noindent options were set, then dont print the indentations for this directory
-        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if constexpr (absNoIndent || relNoIndent) {
             wprintf (L"%16llu    %-*c<%llu files>\n",
                         totalFileSize,
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
@@ -591,15 +591,16 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
 
         // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-        if (get_option (SHOW_PERMISSIONS)) {
+        if constexpr (showPerms) {
             wprintf (L"            ");
         }
-        if (get_option (SHOW_LASTTIME)) {
+        if constexpr (showTime) {
             wprintf (L"%20c", ' ');
         }
 
         // if either of the noindent options were set, then dont print the indentations for this directory
-        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if constexpr (absNoIndent || relNoIndent) {
             wprintf (L"%16c    %-*c<%llu symlinks>\n",
                         '-',
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
@@ -619,15 +620,16 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
 
         // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-        if (get_option (SHOW_PERMISSIONS)) {
+        if constexpr (showPerms) {
             wprintf (L"            ");
         }
-        if (get_option (SHOW_LASTTIME)) {
+        if constexpr (showTime) {
             wprintf (L"%20c", ' ');
         }
 
         // if either of the noindent options were set, then dont print the indentations for this directory
-        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if constexpr (absNoIndent || relNoIndent) {
             wprintf (L"%16c    %-*c<%llu special entries>\n",
                         '-',
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
@@ -649,11 +651,87 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
  *
  * @param pPath
  */
-void scan_path_init (const wchar_t *pPath) noexcept
+void
+scan_path_init (const wchar_t *pPath) noexcept
 {
     sPrintSummary   = true;
 
-    scan_path (pPath, 0);
+    if (get_option (SHOW_PERMISSIONS)) {
+        if (get_option (SHOW_LASTTIME)) {
+            if (get_option (SHOW_ABSNOINDENT)) {
+                if (get_option (SHOW_RELNOINDENT)) {
+                    scan_path<true, true, true, true, true> (pPath, 0);
+                }
+                else {
+                    scan_path<true, true, true, true, false> (pPath, 0);
+                }
+            }
+            else {
+                if (get_option (SHOW_RELNOINDENT)) {
+                    scan_path<true, true, true, false, true> (pPath, 0);
+                }
+                else {
+                    scan_path<true, true, true, false, false> (pPath, 0);
+                }
+            }
+        }
+        else {
+            if (get_option (SHOW_ABSNOINDENT)) {
+                if (get_option (SHOW_RELNOINDENT)) {
+                    scan_path<true, true, false, true, true> (pPath, 0);
+                }
+                else {
+                    scan_path<true, true, false, true, false> (pPath, 0);
+                }
+            }
+            else {
+                if (get_option (SHOW_RELNOINDENT)) {
+                    scan_path<true, true, false, false, true> (pPath, 0);
+                }
+                else {
+                    scan_path<true, true, false, false, false> (pPath, 0);
+                }
+            }
+        }
+    }
+    else {
+        if (get_option (SHOW_LASTTIME)) {
+            if (get_option (SHOW_ABSNOINDENT)) {
+                if (get_option (SHOW_RELNOINDENT)) {
+                    scan_path<true, false, true, true, true> (pPath, 0);
+                }
+                else {
+                    scan_path<true, false, true, true, false> (pPath, 0);
+                }
+            }
+            else {
+                if (get_option (SHOW_RELNOINDENT)) {
+                    scan_path<true, false, true, false, true> (pPath, 0);
+                }
+                else {
+                    scan_path<true, false, true, false, false> (pPath, 0);
+                }
+            }
+        }
+        else {
+            if (get_option (SHOW_ABSNOINDENT)) {
+                if (get_option (SHOW_RELNOINDENT)) {
+                    scan_path<true, false, false, true, true> (pPath, 0);
+                }
+                else {
+                    scan_path<true, false, false, true, false> (pPath, 0);
+                }
+            }
+            else {
+                if (get_option (SHOW_RELNOINDENT)) {
+                    scan_path<true, false, false, false, true> (pPath, 0);
+                }
+                else {
+                    scan_path<true, false, false, false, false> (pPath, 0);
+                }
+            }
+        }
+    }
 
     if (!sPrintSummary) {
         return;
@@ -679,7 +757,8 @@ void scan_path_init (const wchar_t *pPath) noexcept
                 sNumDirsTotal);
 }
 
-int main (int argc, char *argv[]) noexcept
+int
+main (int argc, char *argv[]) noexcept
 {
     const char          *initPathStr;                                                       /** Path to start the scan process from, represneted as a string of chars */
     wchar_t             *initPathWstr;                                                      /** Path to start the scan process from, represented as a string of wide characters */
