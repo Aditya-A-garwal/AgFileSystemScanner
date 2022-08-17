@@ -65,16 +65,18 @@ static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
                                     L"-h, --help                  Print Usage Instructions\n"
                                     L"\n";
 
-/** Unformatted summary string */
-static const wchar_t    *summary    = L"\n"
+/** Unformatted summary string for directory to traverse (not including subdirectories) */
+static const wchar_t    *rootSum    = L"\n"
                                     L"Summary of \"%ls\"\n"
                                     L"<%lu files>\n"
                                     L"<%lu symlinks>\n"
                                     L"<%lu special files>\n"
                                     L"<%lu subdirectories>\n"
                                     L"<%lu total entries>\n"
-                                    L"\n"
-                                    L"Including subdirectories\n"
+                                    L"\n";
+
+/** Unformatted summary string for the directory to traverse (including subdirectories) */
+static const wchar_t    *recSum     = L"Including subdirectories\n"
                                     L"<%lu files>\n"
                                     L"<%lu symlinks>\n"
                                     L"<%lu special files>\n"
@@ -650,7 +652,7 @@ void scan_path_init (const wchar_t *pPath) noexcept
         return;
     }
 
-    wprintf (summary,
+    wprintf (rootSum,
                 pPath,
                 sNumFilesRoot,
                 sNumSymlinksRoot,
@@ -659,15 +661,19 @@ void scan_path_init (const wchar_t *pPath) noexcept
                 sNumFilesRoot +
                 sNumSymlinksRoot +
                 sNumSpecialRoot +
-                sNumDirsRoot,
-                sNumFilesTotal,
-                sNumSymlinksTotal,
-                sNumSpecialTotal,
-                sNumDirsTotal,
-                sNumFilesTotal +
-                sNumSymlinksTotal +
-                sNumSpecialTotal +
-                sNumDirsTotal);
+                sNumDirsRoot);
+
+    if (get_option (SHOW_RECURSIVE)) {
+        wprintf (recSum,
+                    sNumFilesTotal,
+                    sNumSymlinksTotal,
+                    sNumSpecialTotal,
+                    sNumDirsTotal,
+                    sNumFilesTotal +
+                    sNumSymlinksTotal +
+                    sNumSpecialTotal +
+                    sNumDirsTotal);
+    }
 }
 
 int main (int argc, char *argv[]) noexcept
