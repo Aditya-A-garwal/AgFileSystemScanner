@@ -568,10 +568,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
     }
 
+    if constexpr (!sizeOnly) {
     sNumFilesTotal      += regularFileCnt;
     sNumSymlinksTotal   += symlinkCnt;
     sNumSpecialTotal    += specialCnt;
     sNumDirsTotal       += subdirCnt;
+    }
 
     if (pLevel == 0) {
         sNumFilesRoot       += regularFileCnt;
