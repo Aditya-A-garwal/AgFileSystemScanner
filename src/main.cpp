@@ -273,15 +273,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         std::exit (-1);
     }
 
-    // if (fs::exists (pPath) == false) {
-    //     wprintf (L"Directory \"%ls\" does not exist\n", pPath);
-
-    //     return;
-    //     // wprintf (L"The Given Path \"%ls\" does not exist\n", pPath);
-    //     // wprintf (L"Terminating...\n");
-    //     // std::exit (-1);
-    // }
-
     fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
     fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
     fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
