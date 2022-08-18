@@ -246,19 +246,20 @@ void
 print_permissions (const fs::file_status &pEntryStatus) noexcept
 {
     static fs::perms            entryPerms;                                                 /** Permissions of the current entry */
+
     entryPerms      = pEntryStatus.permissions ();
 
     wprintf (L"%c%c%c%c%c%c%c%c%c   ",
-                ((entryPerms & fs::perms::owner_read) == fs::perms::none) ? ('r') : ('-'),
-                ((entryPerms & fs::perms::owner_write) == fs::perms::none) ? ('w') : ('-'),
-                ((entryPerms & fs::perms::owner_exec) == fs::perms::none) ? ('x') : ('-'),
-                ((entryPerms & fs::perms::group_read) == fs::perms::none) ? ('r') : ('-'),
-                ((entryPerms & fs::perms::group_write) == fs::perms::none) ? ('w') : ('-'),
-                ((entryPerms & fs::perms::group_exec) == fs::perms::none) ? ('x') : ('-'),
-                ((entryPerms & fs::perms::others_read) == fs::perms::none) ? ('r') : ('-'),
-                ((entryPerms & fs::perms::others_write) == fs::perms::none) ? ('w') : ('-'),
-                ((entryPerms & fs::perms::others_exec) == fs::perms::none) ? ('x') : ('-')
-            );
+            ((entryPerms & fs::perms::owner_read) == fs::perms::none) ? ('r') : ('-'),
+            ((entryPerms & fs::perms::owner_write) == fs::perms::none) ? ('w') : ('-'),
+            ((entryPerms & fs::perms::owner_exec) == fs::perms::none) ? ('x') : ('-'),
+            ((entryPerms & fs::perms::group_read) == fs::perms::none) ? ('r') : ('-'),
+            ((entryPerms & fs::perms::group_write) == fs::perms::none) ? ('w') : ('-'),
+            ((entryPerms & fs::perms::group_exec) == fs::perms::none) ? ('x') : ('-'),
+            ((entryPerms & fs::perms::others_read) == fs::perms::none) ? ('r') : ('-'),
+            ((entryPerms & fs::perms::others_write) == fs::perms::none) ? ('w') : ('-'),
+            ((entryPerms & fs::perms::others_exec) == fs::perms::none) ? ('x') : ('-')
+        );
 }
 
 /**
@@ -338,7 +339,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         // get the current entry, its name and its status
         entry           = *iter;
         filepath        = entry.path ();
-        entryStatus     = entry.status ();
+        entryStatus     = entry.status (sErrorCode);
+
+        if (sErrorCode.value () != 0) {
+            fwprintf (stderr,
+                        L"Error while getting status for \"%ls\"\n",
+                        filepath.wstring ().c_str ());
+            fwprintf (stderr,
+                        L"Error Code: %4d\n",
+                        sErrorCode.value ());
+            fwprintf (stderr, L"Error message: %s\n", sErrorCode.message ().c_str ());
+            continue;
+        }
 
         // find out the type of the entry
         isDir           = entry.is_directory ();
