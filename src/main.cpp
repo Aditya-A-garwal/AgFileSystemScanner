@@ -266,7 +266,7 @@ print_permissions (const fs::file_status &pEntryStatus) noexcept
  * @param pPath             Path to the directory to scan
  * @param pLevel            The number of recursive calls of this function before the current one
  */
-template <bool isFirstCall, bool showPerms, bool showTime, bool absNoIndent, bool relNoIndent, bool sizeOnly>
+template <bool showPerms, bool showTime, bool absNoIndent, bool relNoIndent, bool sizeOnly>
 uint64_t
 scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 {
@@ -316,7 +316,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         fwprintf (stderr, L"Error Code: %4d\n", sErrorCode.value ());
         fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
 
-        if constexpr (isFirstCall) {
+        if (pLevel == 0) {
             sPrintSummary   = false;
         }
 
@@ -435,7 +435,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 fwprintf (stderr,
                             L"Error while reading size of file \"%ls\"\n",
                             filepath.wstring ().c_str ());
-     fwprintf (stderr,
+                fwprintf (stderr,
                             L"Error Code: %4d\n",
                             sErrorCode.value ());
                 fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
@@ -525,7 +525,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 curFileSize = 0;
             }
             else {
-                curFileSize      = scan_path <false, false, false, false, false, true> (entry.path ().wstring ().c_str (), 1 + pLevel);
+                curFileSize      = scan_path <false, false, false, false, true> (entry.path ().wstring ().c_str (), 1 + pLevel);
             }
 
             totalDirSize     += curFileSize;
@@ -555,7 +555,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
                 if (get_option (SHOW_RECURSIVE)) {
                     if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
-                        scan_path<false, showPerms, showTime, absNoIndent, relNoIndent, sizeOnly> (entry.path ().wstring ().c_str (), 1 + pLevel);
+                        scan_path<showPerms, showTime, absNoIndent, relNoIndent, sizeOnly> (entry.path ().wstring ().c_str (), 1 + pLevel);
                     }
                 }
             }
@@ -569,10 +569,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     }
 
     if constexpr (!sizeOnly) {
-    sNumFilesTotal      += regularFileCnt;
-    sNumSymlinksTotal   += symlinkCnt;
-    sNumSpecialTotal    += specialCnt;
-    sNumDirsTotal       += subdirCnt;
+        sNumFilesTotal      += regularFileCnt;
+        sNumSymlinksTotal   += symlinkCnt;
+        sNumSpecialTotal    += specialCnt;
+        sNumDirsTotal       += subdirCnt;
     }
 
     if (pLevel == 0) {
@@ -691,36 +691,36 @@ scan_path_init (const wchar_t *pPath) noexcept
         if (get_option (SHOW_LASTTIME)) {
             if (get_option (SHOW_ABSNOINDENT)) {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, true, true, true, true, false> (pPath, 0);
+                    scan_path<true, true, true, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, true, true, true, false, false> (pPath, 0);
+                    scan_path<true, true, true, false, false> (pPath, 0);
                 }
             }
             else {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, true, true, false, true, false> (pPath, 0);
+                    scan_path<true, true, false, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, true, true, false, false, false> (pPath, 0);
+                    scan_path<true, true, false, false, false> (pPath, 0);
                 }
             }
         }
         else {
             if (get_option (SHOW_ABSNOINDENT)) {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, true, false, true, true, false> (pPath, 0);
+                    scan_path<true, false, true, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, true, false, true, false, false> (pPath, 0);
+                    scan_path<true, false, true, false, false> (pPath, 0);
                 }
             }
             else {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, true, false, false, true, false> (pPath, 0);
+                    scan_path<true, false, false, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, true, false, false, false, false> (pPath, 0);
+                    scan_path<true, false, false, false, false> (pPath, 0);
                 }
             }
         }
@@ -729,36 +729,36 @@ scan_path_init (const wchar_t *pPath) noexcept
         if (get_option (SHOW_LASTTIME)) {
             if (get_option (SHOW_ABSNOINDENT)) {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, false, true, true, true, false> (pPath, 0);
+                    scan_path<false, true, true, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, false, true, true, false, false> (pPath, 0);
+                    scan_path<false, true, true, false, false> (pPath, 0);
                 }
             }
             else {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, false, true, false, true, false> (pPath, 0);
+                    scan_path<false, true, false, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, false, true, false, false, false> (pPath, 0);
+                    scan_path<false, true, false, false, false> (pPath, 0);
                 }
             }
         }
         else {
             if (get_option (SHOW_ABSNOINDENT)) {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, false, false, true, true, false> (pPath, 0);
+                    scan_path<false, false, true, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, false, false, true, false, false> (pPath, 0);
+                    scan_path<false, false, true, false, false> (pPath, 0);
                 }
             }
             else {
                 if (get_option (SHOW_RELNOINDENT)) {
-                    scan_path<true, false, false, false, true, false> (pPath, 0);
+                    scan_path<false, false, false, true, false> (pPath, 0);
                 }
                 else {
-                    scan_path<true, false, false, false, false, false> (pPath, 0);
+                    scan_path<false, false, false, false, false> (pPath, 0);
                 }
             }
         }
