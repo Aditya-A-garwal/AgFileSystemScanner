@@ -38,6 +38,39 @@
 
 #define INDENT_COL_WIDTH        (4)                                                         /** Number of spaces by which to further indent each subsequent nested directory's entries */
 
+#define red                     "\033[0;31m"
+#define Lred                    L"\033[0;31m"
+
+#define RED                     "\033[1;31m"
+#define LRED                    L"\033[1;31m"
+
+#define blue                    "\033[0;34m"
+#define Lblue                   L"\033[0;34m"
+
+#define BLUE                    "\033[1;34m"
+#define LBLUE                   L"\033[1;34m"
+
+#define cyan                    "\033[0;36m"
+#define Lcyan                   L"\033[0;36m"
+
+#define CYAN                    "\033[1;36m"
+#define LCYAN                   L"\033[1;36m"
+
+#define green                   "\033[0;32m"
+#define Lgreen                  L"\033[0;32m"
+
+#define GREEN                   "\033[1;32m"
+#define LGREEN                  L"\033[1;32m"
+
+#define yellow                  "\033[0;33m"
+#define Lyellow                 L"\033[0;33m"
+
+#define YELLOW                  "\033[1;33m"
+#define LYELLOW                 L"\033[1;33m"
+
+#define NO_CLR                  "\033[0m"
+#define LNO_CLR                 L"\033[0m"
+
 namespace fs                    = std::filesystem;
 namespace chrono                = std::chrono;
 
