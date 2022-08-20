@@ -28,6 +28,7 @@
 #define SEARCH_EXACT            (8)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */ //! UNUSED
 #define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */ //! UNUSED
 #define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
+
 #define SHOW_DIR_SIZE           (12)                                                        /** Option that specifies if directory sizes should be recursively calculated and shown */
 
 #define HELP                    (13)                                                        /** Option that specifies if usage instructions need to be printed */
@@ -74,7 +75,6 @@
 namespace fs                    = std::filesystem;
 namespace chrono                = std::chrono;
 
-/** Usage instructions of the program */
 /** Usage instructions of the program */
 static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
                                     L"Scan through the filesystem starting from PATH.\n"
@@ -185,12 +185,15 @@ clear_option (const uint8_t &pBit) noexcept
 [[nodiscard]] inline wchar_t
 *create_wchar (const char *pPtr) noexcept
 {
+    // setlocale (LC_CTYPE, "UTF-32");
+
     uint64_t    len;                                                                        /** Length of the string to convert to a wide string (including the null termination character) */
     wchar_t     *result {nullptr};                                                          /** Resultant wide string after the conversion */
 
     // calculate the length of the input string and allocate a wide string of the corresponding size
     len     = strnlen (pPtr, MAX_PATH_LEN);
-    result  = (wchar_t *)malloc (sizeof (wchar_t) * (len / sizeof (char)));
+    result  = (wchar_t *)malloc (sizeof (wchar_t) * (len + 1));
+    memset (result, 0, sizeof (wchar_t) * (len + 1));
 
     if (result == nullptr) {
         fprintf (stderr,
@@ -198,12 +201,18 @@ clear_option (const uint8_t &pBit) noexcept
         std::exit (-1);
     }
 
-    for (uint64_t i = 0; i < len; ++i) {
+    for (uint64_t i = 0; i <= len; ++i) {
         ((char *)&result[i])[0] = pPtr[i];
         ((char *)&result[i])[1] = 0;
         ((char *)&result[i])[2] = 0;
         ((char *)&result[i])[3] = 0;
     }
+
+    // if (std::mbstowcs (result, pPtr, len) != len) {
+    //     fprintf (stderr,
+    //     "Could not convert charace String when converting path\n");
+    //     std::exit (-1);
+    // }
 
     return result;
 }
@@ -1036,11 +1045,14 @@ main (int argc, char *argv[]) noexcept
     // if a search pattern was provided, then convert it to a wide string
     sSearchPattern      = (searchPattern == nullptr) ? (nullptr) : (create_wchar (searchPattern));
 
-    // scan_path (initPathWstr, 0);
+    if (sSearchPattern != nullptr) {
+        wprintf (L"Searching for %ls\n", sSearchPattern);
+    }
+
     scan_path_init (initPathWstr);
 
     free (initPathWstr);
-    free (sSearchPattern);
+    free ((void *)sSearchPattern);
 
     return 0;
 }
