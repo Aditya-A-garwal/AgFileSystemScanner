@@ -215,12 +215,10 @@ print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
     // if an error was generated, then report it
     if (sErrorCode.value () != 0) {
         fwprintf (stderr,
-                    L"Error while reading last modified time for \"%ls\"\n",
-                    pFsEntry.path ().wstring ().c_str ());
-        fwprintf (stderr,
-                    L"Error Code: %4d\n",
-                    sErrorCode.value ());
-        fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
+                    L"Error while reading last modified time for \"%ls\" (Code %d, %s)\n",
+                    pFsEntry.path ().wstring ().c_str (),
+                    sErrorCode.value (),
+                    sErrorCode.message ().c_str ());
         wprintf (L"%20c", ' ');
     }
     // format the time and print it
@@ -313,11 +311,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
         fwprintf (stderr,
-                    L"Error while creating directory iterator for path \"%ls\"\n",
-                    pPath);
-        fwprintf (stderr, L"Error Code: %4d\n", sErrorCode.value ());
-        fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
-
+                    L"Error while creating directory iterator for \"%ls\" (Code %d, %s)\n",
+                    pPath,
+                    sErrorCode.value (),
+                    sErrorCode.message ());
         if (pLevel == 0) {
             sPrintSummary   = false;
         }
@@ -343,12 +340,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         if (sErrorCode.value () != 0) {
             fwprintf (stderr,
-                        L"Error while getting status for \"%ls\"\n",
-                        filepath.wstring ().c_str ());
-            fwprintf (stderr,
-                        L"Error Code: %4d\n",
-                        sErrorCode.value ());
-            fwprintf (stderr, L"Error message: %s\n", sErrorCode.message ().c_str ());
+                        L"Error while getting status of \"%ls\" (Code %d, %s)\n",
+                        filepath.wstring ().c_str (),
+                        sErrorCode.value (),
+                        sErrorCode.message ());
             continue;
         }
 
@@ -364,12 +359,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 filepath    = fs::canonical (filepath, sErrorCode);
                 if (sErrorCode.value () != 0) {
                     fwprintf (stderr,
-                                L"Error while converting filepath to canonical value for \"%ls\"\n",
-                                filepath.wstring ().c_str ());
-                    fwprintf (stderr,
-                                L"Error Code: %4d\n",
-                                sErrorCode.value ());
-                    fwprintf (stderr, L"Error message: %s\n", sErrorCode.message ().c_str ());
+                                L"Error while converting filepath to canonical value for \"%ls\" (Code %d, %s)\n",
+                                filepath.wstring ().c_str (),
+                                sErrorCode.value (),
+                                sErrorCode.message ());
                 }
             }
             else if (get_option (SHOW_RELNOINDENT)) {
@@ -381,12 +374,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     filepath    = fs::relative (filepath, sErrorCode);
                     if (sErrorCode.value () != 0) {
                         fwprintf (stderr,
-                                    L"Error while converting filepath to relative value for \"%ls\"\n",
-                                    filepath.wstring ().c_str ());
-                        fwprintf (stderr,
-                                    L"Error Code: %4d\n",
-                                    sErrorCode.value ());
-                        fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
+                                L"Error while converting filepath to relative value for \"%ls\" (Code %d, %s)\n",
+                                filepath.wstring ().c_str (),
+                                sErrorCode.value (),
+                                sErrorCode.message ());
                     }
                 }
             }
@@ -409,12 +400,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
                     if (sErrorCode.value () != 0) {
                         fwprintf (stderr,
-                                    L"Error while reading target of symlink \"%ls\"\n",
-                                    filepath.wstring ().c_str ());
-                        fwprintf (stderr,
-                                    L"Error Code: %4d\n",
-                                    sErrorCode.value ());
-                        fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
+                                    L"Error while reading target of symlink \"%ls\" (Code %d, %s)\n",
+                                    filepath.wstring ().c_str (),
+                                    sErrorCode.value (),
+                                    sErrorCode.message ());
                     }
                     else {
 
@@ -446,12 +435,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             if (sErrorCode.value () != 0) {
                 fwprintf (stderr,
-                            L"Error while reading size of file \"%ls\"\n",
-                            filepath.wstring ().c_str ());
-                fwprintf (stderr,
-                            L"Error Code: %4d\n",
-                            sErrorCode.value ());
-                fwprintf (stderr, L"Error Message: %s\n", sErrorCode.message ().c_str ());
+                            L"Error while reading size of file (Code %d, %s)\"%ls\"\n",
+                            filepath.wstring ().c_str (),
+                            sErrorCode.value (),
+                            sErrorCode.message ());
 
                 // if the size can not be read, set the isFile flag to false to indicate a failed read
                 curFileSize = 0;
