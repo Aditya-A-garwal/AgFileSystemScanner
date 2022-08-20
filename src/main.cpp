@@ -65,7 +65,8 @@ static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
                                     L"    --contains              Only log those entries whose name contains the given string. (normally hidden)\n"
                                     L"\n"
                                     L"-h, --help                  Print Usage Instructions\n"
-                                    L"    --no-dir-size           Do not show directory sizes\n"
+                                    // L"    --no-dir-size           Do not show directory sizes\n"
+                                    L"    --use-dir-inode-size    Use the size of the inode structure of a directory rather than recursively going inside to check it\n"
                                     L"\n";
 
 /** Unformatted summary string for directory to traverse (not including subdirectories) */
@@ -314,7 +315,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     L"Error while creating directory iterator for \"%ls\" (Code %d, %s)\n",
                     pPath,
                     sErrorCode.value (),
-                    sErrorCode.message ());
+                    sErrorCode.message ().c_str ());
         if (pLevel == 0) {
             sPrintSummary   = false;
         }
@@ -343,7 +344,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                         L"Error while getting status of \"%ls\" (Code %d, %s)\n",
                         filepath.wstring ().c_str (),
                         sErrorCode.value (),
-                        sErrorCode.message ());
+                        sErrorCode.message ().c_str ());
             continue;
         }
 
@@ -362,7 +363,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                                 L"Error while converting filepath to canonical value for \"%ls\" (Code %d, %s)\n",
                                 filepath.wstring ().c_str (),
                                 sErrorCode.value (),
-                                sErrorCode.message ());
+                                sErrorCode.message ().c_str ());
                 }
             }
             else if (get_option (SHOW_RELNOINDENT)) {
@@ -377,7 +378,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                                 L"Error while converting filepath to relative value for \"%ls\" (Code %d, %s)\n",
                                 filepath.wstring ().c_str (),
                                 sErrorCode.value (),
-                                sErrorCode.message ());
+                                sErrorCode.message ().c_str ());
                     }
                 }
             }
@@ -403,7 +404,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                                     L"Error while reading target of symlink \"%ls\" (Code %d, %s)\n",
                                     filepath.wstring ().c_str (),
                                     sErrorCode.value (),
-                                    sErrorCode.message ());
+                                    sErrorCode.message ().c_str ());
                     }
                     else {
 
@@ -435,10 +436,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             if (sErrorCode.value () != 0) {
                 fwprintf (stderr,
-                            L"Error while reading size of file (Code %d, %s)\"%ls\"\n",
+                            L"Error while reading size of file \"%ls\" (Code %d, %s)\n",
                             filepath.wstring ().c_str (),
                             sErrorCode.value (),
-                            sErrorCode.message ());
+                            sErrorCode.message ().c_str ());
 
                 // if the size can not be read, set the isFile flag to false to indicate a failed read
                 curFileSize = 0;
@@ -521,6 +522,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             ++subdirCnt;
 
+            //! use size of inode structure
             if (get_option (NO_DIR_SIZE)) {
                 curFileSize = 0;
             }
@@ -914,9 +916,9 @@ main (int argc, char *argv[]) noexcept
             if (strncmp (argv[i], "--permissions", 13) == 0) {
                 set_option (SHOW_PERMISSIONS);
             }
-            else if (strncmp (argv[i], "--no-dir-size", 13) == 0) {
-                set_option (NO_DIR_SIZE);
-            }
+            // else if (strncmp (argv[i], "--no-dir-size", 13) == 0) {
+            //     set_option (NO_DIR_SIZE);
+            // }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
             }
@@ -970,6 +972,15 @@ main (int argc, char *argv[]) noexcept
         case 19:
             if (strncmp (argv[i], "--modification-time", 19) == 0) {
                 set_option (SHOW_LASTTIME);
+            }
+            else {
+                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+            }
+            break;
+
+        case 20:
+            if (strncmp (argv[i], "--use-dir-inode-size", 20) == 0) {
+                set_option (NO_DIR_SIZE);
             }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
