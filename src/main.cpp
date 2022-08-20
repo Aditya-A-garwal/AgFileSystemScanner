@@ -28,7 +28,7 @@
 #define SEARCH_EXACT            (8)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */ //! UNUSED
 #define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */ //! UNUSED
 #define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
-#define NO_DIR_SIZE             (12)                                                        /** Option that specifies if directory sizes should not be shown */
+#define SHOW_DIR_SIZE           (12)                                                        /** Option that specifies if directory sizes should be recursively calculated and shown */
 
 #define HELP                    (13)                                                        /** Option that specifies if usage instructions need to be printed */
 
@@ -65,8 +65,7 @@ static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
                                     L"    --contains              Only log those entries whose name contains the given string. (normally hidden)\n"
                                     L"\n"
                                     L"-h, --help                  Print Usage Instructions\n"
-                                    // L"    --no-dir-size           Do not show directory sizes\n"
-                                    L"    --use-dir-inode-size    Use the size of the inode structure of a directory rather than recursively going inside to check it\n"
+                                    L"    --recursive-dir-size    Use the size of the inode structure of a directory rather than recursively going inside to check it\n"
                                     L"\n";
 
 /** Unformatted summary string for directory to traverse (not including subdirectories) */
@@ -523,11 +522,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             ++subdirCnt;
 
             //! use size of inode structure
-            if (get_option (NO_DIR_SIZE)) {
-                curFileSize = 0;
+            if (get_option (SHOW_DIR_SIZE)) {
+                curFileSize     = scan_path <true> (entry.path ().wstring ().c_str (), 1 + pLevel);
             }
             else {
-                curFileSize      = scan_path <true> (entry.path ().wstring ().c_str (), 1 + pLevel);
+                curFileSize     = -1;
             }
 
             totalDirSize     += curFileSize;
@@ -543,12 +542,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 }
 
                 if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                    wprintf (L"%16llu    <%ls>\n",
+                    wprintf (L"%16lld    <%ls>\n",
                                 curFileSize,
                                 filepath.wstring ().c_str ());
                 }
                 else {
-                    wprintf (L"%16llu    %-*c<%ls>\n",
+                    wprintf (L"%16lld    %-*c<%ls>\n",
                                 curFileSize,
                                 indentWidth,
                                 ' ',
@@ -602,14 +601,14 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             // if either of the noindent options were set, then dont print the indentations for this directory
             // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
             if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                wprintf (L"%16llu    %-*c<%llu files>\n",
+                wprintf (L"%16lld    %-*c<%llu files>\n",
                             totalFileSize,
                             (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
                             ' ',
                             regularFileCnt);
             }
             else {
-                wprintf (L"%16llu    %-*c<%llu files>\n",
+                wprintf (L"%16lld    %-*c<%llu files>\n",
                             totalFileSize,
                             indentWidth,
                             ' ',
@@ -917,7 +916,7 @@ main (int argc, char *argv[]) noexcept
                 set_option (SHOW_PERMISSIONS);
             }
             // else if (strncmp (argv[i], "--no-dir-size", 13) == 0) {
-            //     set_option (NO_DIR_SIZE);
+            //     set_option (SHOW_DIR_SIZE);
             // }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
@@ -979,8 +978,8 @@ main (int argc, char *argv[]) noexcept
             break;
 
         case 20:
-            if (strncmp (argv[i], "--use-dir-inode-size", 20) == 0) {
-                set_option (NO_DIR_SIZE);
+            if (strncmp (argv[i], "--recursive-dir-size", 20) == 0) {
+                set_option (SHOW_DIR_SIZE);
             }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
