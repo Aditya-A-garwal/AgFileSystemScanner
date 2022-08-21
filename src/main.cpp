@@ -25,8 +25,8 @@
 #define SHOW_SYMLINKS           (6)                                                         /** Option that specifies if all symlinks within a directory need to be individually displayed */
 #define SHOW_SPECIAL            (7)                                                         /** Option that specifies if all special files (such as sockets, block devices etc.) within a directory need to be individually displayed */
 
-#define SEARCH_EXACT            (8)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */ //! UNUSED
-#define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */ //! UNUSED
+#define SEARCH_EXACT            (8)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */
+#define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */
 #define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
 
 #define SHOW_DIR_SIZE           (12)                                                        /** Option that specifies if directory sizes should be recursively calculated and shown */
@@ -120,6 +120,25 @@ static const wchar_t    *recSum     = L"Including subdirectories\n"
                                     L"<%lu total entries>\n"
                                     L"\n";
 
+/** Unformatted summary string for number of entries found matching search pattern (in search mode) */
+static const wchar_t    *foundSum   = L"\n"
+                                    L"Found matching in \"%ls\"\n"
+                                    L"<%lu files>\n"
+                                    L"<%lu symlinks>\n"
+                                    L"<%lu special files>\n"
+                                    L"<%lu subdirectories>\n"
+                                    L"<%lu total entries>\n"
+                                    L"\n";
+
+/** Unformatted summary string for number of entries traversed while matching search pattern (in search mode) */
+static const wchar_t    *travSum    = L"Summary of traversal of \"%ls\"\n"
+                                    L"<%lu files>\n"
+                                    L"<%lu symlinks>\n"
+                                    L"<%lu special files>\n"
+                                    L"<%lu subdirectories>\n"
+                                    L"<%lu total entries>\n"
+                                    L"\n";
+
 static uint64_t         sOptionMask         {};                                             /** Bitmask to represent command line options provided by the user */
 static std::error_code  sErrorCode          {};                                             /** Container for error code to be passed around when dealing with std::filesystem artifacts */
 
@@ -134,6 +153,13 @@ static uint64_t         sNumFilesRoot       {};                                 
 static uint64_t         sNumSymlinksRoot    {};                                             /** Number of symlinks traversed in the root directory */
 static uint64_t         sNumSpecialRoot     {};                                             /** Number of special files traversed in the root directory */
 static uint64_t         sNumDirsRoot        {};                                             /** Number of subdirectories in the root directory */
+
+static uint64_t         sNumFilesTrav       {};                                             /** Number of files matching the search pattern */
+static uint64_t         sNumSymlinksTrav    {};                                             /** Number of symlinks matching the search pattern */
+static uint64_t         sNumSpecialTrav     {};                                             /** Number of special files matching the search pattern */
+static uint64_t         sNumDirsTrav        {};                                             /** Number of subdirectories matching the search pattern */
+
+static uint64_t         sErrorEntries       {};                                             /** Number of entries that were encountered but could not be processed/displayed for whatever reason */ //! UNUSED
 
 static bool             sPrintSummary       {};                                             /** Flag to determine whether the summary should be printed or not */
 
@@ -316,7 +342,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
     // the path can not be a nullptr, it must be a valid string (FIND A WAY TO FREE THE STRINGS ALLOCATED IN MAIN)
     if (pPath == nullptr) {
-        fwprintf (stderr, L"Path can not point to NULL\n");
+        fwprintf (stderr, L"Path can not be NULL");
         std::exit (-1);
     }
 
@@ -324,10 +350,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
     fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
 
-    bool                    isDir;                                                          /** Stores whether the current entry is a directory */
-    bool                    isFile;                                                         /** Stores whether the current entry is a regular file */
-    bool                    isSymlink;                                                      /** Stores whether the current entry is a symlink */
-    bool                    isSpecial;                                                      /** Stores whether the current entry is a special file */
+    static bool             isDir;                                                          /** Stores whether the current entry is a directory */
+    static bool             isFile;                                                         /** Stores whether the current entry is a regular file */
+    static bool             isSymlink;                                                      /** Stores whether the current entry is a symlink */
+    static bool             isSpecial;                                                      /** Stores whether the current entry is a special file */
 
     uint64_t                totalDirSize;                                                   /** Stores the total size of this entry */
 
@@ -389,6 +415,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             continue;
         }
 
+
         // find out the type of the entry
         isDir           = entry.is_directory ();
         isFile          = entry.is_regular_file ();
@@ -406,6 +433,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                                 sErrorCode.value (),
                                 sErrorCode.message ().c_str ());
                 }
+
+                continue;
             }
             else if (get_option (SHOW_RELNOINDENT)) {
 
@@ -422,6 +451,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                                 sErrorCode.message ().c_str ());
                     }
                 }
+
+                continue;
             }
         }
 
@@ -472,7 +503,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
         else if (isFile) {
 
-            // curFileSize     = fs::file_size (entry, sErrorCode);
             curFileSize     = fs::file_size (entry, sErrorCode);
 
             if (sErrorCode.value () != 0) {
@@ -483,12 +513,13 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                             sErrorCode.message ().c_str ());
 
                 // if the size can not be read, set the isFile flag to false to indicate a failed read
-                curFileSize = 0;
+                curFileSize = -1;
                 isFile      = false;
             }
-
+            else {
             totalFileSize   += curFileSize;
             totalDirSize    += curFileSize;
+            }
 
             if constexpr (!sizeOnly) {
                 ++regularFileCnt;
@@ -505,12 +536,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     // if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
                     if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
                         wprintf (L"%16lld    %ls\n",
-                                    (isFile) ? (curFileSize) : (-1),
+                                    curFileSize,
                                     filepath.wstring ().c_str ());
                     }
                     else {
                         wprintf (L"%16lld    %-*c%ls\n",
-                                    (isFile) ? (curFileSize) : (-1),
+                                    curFileSize,
                                     indentWidth,
                                     ' ',
                                     filepath.filename ().wstring ().c_str ());
@@ -565,13 +596,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             //! use size of inode structure
             if (get_option (SHOW_DIR_SIZE)) {
-                curFileSize     = scan_path <true> (entry.path ().wstring ().c_str (), 1 + pLevel);
+                curFileSize     = scan_path <true> (entry.path ().wstring ().c_str (), 0);
+                totalDirSize    += curFileSize;
             }
             else {
                 curFileSize     = -1;
             }
-
-            totalDirSize     += curFileSize;
 
             if constexpr (!sizeOnly) {
 
@@ -723,6 +753,250 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 /**
  * @brief
  *
+ * @tparam sizeOnly
+ * @param pPath
+ * @param pLevel
+ */
+void
+scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
+{
+    if (pPath == nullptr) {
+        fwprintf (stderr, L"Path can not be NULL");
+        std::exit (-1);
+    }
+
+    fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
+    fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
+    fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
+
+    static bool             isDir;                                                          /** Stores whether the current entry is a directory */
+    static bool             isFile;                                                         /** Stores whether the current entry is a regular file */
+    static bool             isSymlink;                                                      /** Stores whether the current entry is a symlink */
+    static bool             isSpecial;                                                      /** Stores whether the current entry is a special file */
+
+    static bool             isMatch;                                                        /** Stores whether the current entry matches the search pattern */
+
+    // uint64_t                totalDirSize;                                                   /** Stores the total size of this entry */
+    uint64_t                curFileSize;                                                    /** Size of file that is being currently processed */
+
+    fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
+
+    fs::path                filepath;                                                       /** Name of the current entry */
+
+    const char              *specialEntryType;                                              /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
+
+    fs::path                targetPath;                                                     /** Stores the path to the target of the symlink if the entry is a symlink */
+    std::wstring            targetName;                                                     /** Stores the target of the symlink if the entry is a symlink*/
+
+    // if an error occoured while trying to get the directory iterator, then report it here
+    if (sErrorCode.value () != 0) {
+        fwprintf (stderr,
+                    L"Error while creating directory iterator for \"%ls\" (Code %d, %s)\n",
+                    pPath,
+                    sErrorCode.value (),
+                    sErrorCode.message ().c_str ());
+        if (pLevel == 0) {
+            sPrintSummary   = false;
+        }
+
+        return;
+    }
+
+    // initialize all counters to 0
+    // totalDirSize        = 0;
+
+    for (fin = end (iter); iter != fin; ++iter) {
+
+        // get the current entry, its name and its status
+        entry           = *iter;
+        filepath        = entry.path ();
+        entryStatus     = entry.status (sErrorCode);
+
+        if (sErrorCode.value () != 0) {
+            fwprintf (stderr,
+                        L"Error while getting status of \"%ls\" (Code %d, %s)\n",
+                        filepath.wstring ().c_str (),
+                        sErrorCode.value (),
+                        sErrorCode.message ().c_str ());
+            continue;
+        }
+
+        // find out the type of the entry
+        isDir           = entry.is_directory ();
+        isFile          = entry.is_regular_file ();
+        isSymlink       = entry.is_symlink ();
+        isSpecial       = entry.is_other ();
+
+        // reset the match status
+        isMatch         = false;
+
+        if (isSymlink) {
+            ++sNumSymlinksTrav;
+        }
+        else if (isFile) {
+            ++sNumFilesTrav;
+        }
+        else if (isSpecial) {
+            ++sNumSpecialTrav;
+        }
+        else if (isDir) {
+            ++sNumDirsTrav;
+        }
+        else {
+            ++sErrorEntries;
+        }
+
+        if (get_option (SEARCH_EXACT)) {
+
+            isMatch = filepath.filename ().wstring () == sSearchPattern;
+
+            if (isMatch) {
+                if (isDir) {
+                    ++sNumDirsTotal;
+                }
+                else if (isFile && get_option (SHOW_FILES)) {
+                    ++sNumFilesTotal;
+                }
+                else if (isSymlink && get_option (SHOW_SYMLINKS)) {
+                    ++sNumSymlinksTotal;
+                }
+                else if (isSpecial && get_option (SHOW_SPECIAL)) {
+                    ++sNumSpecialTotal;
+                }
+                else {
+                    isMatch = false;
+                }
+            }
+
+        }
+        else if (get_option (SEARCH_NOEXT)) {
+            isMatch = filepath.stem ().wstring () == sSearchPattern;
+
+            if (isMatch) {
+                if (isDir) {
+                    ++sNumDirsTotal;
+                }
+                else if (isFile && get_option (SHOW_FILES)) {
+                    ++sNumFilesTotal;
+                }
+                else if (isSymlink && get_option (SHOW_SYMLINKS)) {
+                    ++sNumSymlinksTotal;
+                }
+                else if (isSpecial && get_option (SHOW_SPECIAL)) {
+                    ++sNumSpecialTotal;
+                }
+                else {
+                    isMatch = false;
+                }
+            }
+        }
+        else { //!
+
+        }
+
+        if (isMatch) {
+
+            filepath    = fs::canonical (filepath, sErrorCode);
+            if (sErrorCode.value () != 0) {
+                fwprintf (stderr,
+                            L"Error while converting filepath to canonical value for \"%ls\" (Code %d, %s)\n",
+                            filepath.wstring ().c_str (),
+                            sErrorCode.value (),
+                            sErrorCode.message ().c_str ());
+            }
+
+            else {
+                if (get_option (SHOW_PERMISSIONS)) {
+                    print_permissions (entryStatus);
+                }
+
+                if (get_option (SHOW_LASTTIME)) {
+                    print_last_modif_time (entry);
+                }
+
+                if (isSymlink) {
+
+                    wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
+                                "SYMLINK",
+                                filepath.wstring ().c_str (),
+                                targetName.c_str ());
+                }
+
+                else if (isFile) {
+
+                    curFileSize     = fs::file_size (entry, sErrorCode);
+
+                    if (sErrorCode.value () != 0) {
+                        fwprintf (stderr,
+                                    L"Error while reading size of file \"%ls\" (Code %d, %s)\n",
+                                    filepath.wstring ().c_str (),
+                                    sErrorCode.value (),
+                                    sErrorCode.message ().c_str ());
+
+                        // if the size can not be read, set the isFile flag to false to indicate a failed read
+                        curFileSize = -1;
+                        isFile      = false;
+                    }
+
+                    wprintf (L"%16lld    %ls\n",
+                                curFileSize,
+                                filepath.wstring ().c_str ());
+                }
+
+                else if (isSpecial) {
+                    specialEntryType    = "SPECIAL";
+
+                    if (entry.is_socket ()) {
+                        specialEntryType    = "SOCKET";
+                    }
+                    else if (entry.is_block_file ()) {
+                        specialEntryType    = "BLOCK DEVICE";
+                    }
+                    else if (entry.is_fifo ()) {
+                        specialEntryType    = "FIFO PIPE";
+                    }
+
+                    if (get_option (SHOW_PERMISSIONS)) {
+                        print_permissions (entryStatus);
+                    }
+
+                    if (get_option (SHOW_LASTTIME)) {
+                        wprintf (L"%24c", ' ');
+                    }
+
+                    wprintf (L"%16s    %ls\n",
+                                specialEntryType,
+                                filepath.wstring ().c_str ());
+                }
+
+                if (isDir) {
+
+                    if (get_option (SHOW_DIR_SIZE)) {
+                        curFileSize = scan_path<true> (entry.path ().wstring ().c_str (), 0);
+                    }
+                    else {
+                        curFileSize = -1;
+                    }
+
+                    wprintf (L"%16lld    <%ls>\n",
+                            curFileSize,
+                            filepath.wstring ().c_str ());
+                }
+            }
+
+        }
+
+        if (isDir && !isSymlink) {
+            if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
+                scan_path_search (entry.path ().wstring ().c_str (), 1 + pLevel);
+            }
+        }
+    }
+}
+
+/**
+ * @brief
+ *
  * @param pPath
  */
 void
@@ -758,6 +1032,41 @@ scan_path_init (const wchar_t *pPath) noexcept
                     sNumSpecialTotal +
                     sNumDirsTotal);
     }
+}
+
+void
+scan_path_search_init (const wchar_t *pPath) noexcept
+{
+    sPrintSummary   = true;
+
+    wprintf (L"Searching for %ls\n", sSearchPattern);
+
+    scan_path_search (pPath, 0);
+
+    if (!sPrintSummary) {
+        return;
+    }
+
+    wprintf (foundSum,
+                pPath,
+                sNumFilesTotal,
+                sNumSymlinksTotal,
+                sNumSpecialTotal,
+                sNumDirsTotal,
+                sNumFilesTotal +
+                sNumSymlinksTotal +
+                sNumSpecialTotal +
+                sNumDirsTotal);
+    wprintf (travSum,
+                pPath,
+                sNumFilesTrav,
+                sNumSymlinksTrav,
+                sNumSpecialTrav,
+                sNumDirsTrav,
+                sNumFilesTrav +
+                sNumSymlinksTrav +
+                sNumSpecialTrav +
+                sNumDirsTrav);
 }
 
 
@@ -838,7 +1147,7 @@ main (int argc, char *argv[]) noexcept
                 // make sure that a search pattern was provided
                 // if (i == (argc - 1) || strnlen (argv[i + 1], MAX_ARG_LEN) == 0 || argv[i + 1] == '-') {
                 if (i == (uint64_t)(argc - 1) || strnlen (argv[i + 1], MAX_ARG_LEN) == 0) {
-                    wprintf (L"No Search pattern provided after \"%ls\" flag\n", argv[i]);
+                    wprintf (L"No Search pattern provided after \"%s\" flag\n", argv[i]);
                     wprintf (L"Terminating...\n");
                     std::exit (-1);
                 }
@@ -1046,10 +1355,11 @@ main (int argc, char *argv[]) noexcept
     sSearchPattern      = (searchPattern == nullptr) ? (nullptr) : (create_wchar (searchPattern));
 
     if (sSearchPattern != nullptr) {
-        wprintf (L"Searching for %ls\n", sSearchPattern);
+        scan_path_search_init (initPathWstr);
     }
-
+    else {
     scan_path_init (initPathWstr);
+    }
 
     free (initPathWstr);
     free ((void *)sSearchPattern);
