@@ -39,6 +39,10 @@
 
 #define INDENT_COL_WIDTH        (4)                                                         /** Number of spaces by which to further indent each subsequent nested directory's entries */
 
+// #define USE_KMP_SEARCH          1                                                           /** Defined if Knuth Morris Prat search needs to be used */
+
+#define LPS_LEN                 (1024)                                                      /** Length of the LPS array (used in search implementations) */
+
 #define red                     "\033[0;31m"
 #define Lred                    L"\033[0;31m"
 
@@ -101,7 +105,7 @@ static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
                                     L"    --recursive-dir-size    Use the size of the inode structure of a directory rather than recursively going inside to check it\n"
                                     L"\n";
 
-/** Unformatted summary string for directory to traverse (not including subdirectories) */
+/** Unformatted summary string for directory to Totalerse (not including subdirectories) */
 static const wchar_t    *rootSum    = L"\n"
                                     L"Summary of \"%ls\"\n"
                                     L"<%lu files>\n"
@@ -111,7 +115,7 @@ static const wchar_t    *rootSum    = L"\n"
                                     L"<%lu total entries>\n"
                                     L"\n";
 
-/** Unformatted summary string for the directory to traverse (including subdirectories) */
+/** Unformatted summary string for the directory to Totalerse (including subdirectories) */
 static const wchar_t    *recSum     = L"Including subdirectories\n"
                                     L"<%lu files>\n"
                                     L"<%lu symlinks>\n"
@@ -122,7 +126,7 @@ static const wchar_t    *recSum     = L"Including subdirectories\n"
 
 /** Unformatted summary string for number of entries found matching search pattern (in search mode) */
 static const wchar_t    *foundSum   = L"\n"
-                                    L"Found matching in \"%ls\"\n"
+                                    L"Summary of matching entries\n"
                                     L"<%lu files>\n"
                                     L"<%lu symlinks>\n"
                                     L"<%lu special files>\n"
@@ -131,7 +135,7 @@ static const wchar_t    *foundSum   = L"\n"
                                     L"\n";
 
 /** Unformatted summary string for number of entries traversed while matching search pattern (in search mode) */
-static const wchar_t    *travSum    = L"Summary of traversal of \"%ls\"\n"
+static const wchar_t    *TotalSum    = L"Summary of traversal of \"%ls\"\n"
                                     L"<%lu files>\n"
                                     L"<%lu symlinks>\n"
                                     L"<%lu special files>\n"
@@ -139,8 +143,13 @@ static const wchar_t    *travSum    = L"Summary of traversal of \"%ls\"\n"
                                     L"<%lu total entries>\n"
                                     L"\n";
 
+static const wchar_t    *sInitPath          {nullptr};                                      /** Initial path to start the scan from */
+static const wchar_t    *sSearchPattern     {nullptr};                                      /** Pattern to search for if any of the search options are set */
+
 static uint64_t         sOptionMask         {};                                             /** Bitmask to represent command line options provided by the user */
 static std::error_code  sErrorCode          {};                                             /** Container for error code to be passed around when dealing with std::filesystem artifacts */
+
+static uint64_t         sErrorEntries       {};                                             /** Number of entries that were encountered but could not be processed/displayed for whatever reason */ //! UNUSED
 
 static uint64_t         sRecursionLevel     {};                                             /** Number of levels of directories to go within if the recursive option is set */
 
@@ -154,16 +163,16 @@ static uint64_t         sNumSymlinksRoot    {};                                 
 static uint64_t         sNumSpecialRoot     {};                                             /** Number of special files traversed in the root directory */
 static uint64_t         sNumDirsRoot        {};                                             /** Number of subdirectories in the root directory */
 
-static uint64_t         sNumFilesTrav       {};                                             /** Number of files matching the search pattern */
-static uint64_t         sNumSymlinksTrav    {};                                             /** Number of symlinks matching the search pattern */
-static uint64_t         sNumSpecialTrav     {};                                             /** Number of special files matching the search pattern */
-static uint64_t         sNumDirsTrav        {};                                             /** Number of subdirectories matching the search pattern */
-
-static uint64_t         sErrorEntries       {};                                             /** Number of entries that were encountered but could not be processed/displayed for whatever reason */ //! UNUSED
+static uint64_t         sNumFilesMatched    {};                                             /** Number of files matching the search pattern */
+static uint64_t         sNumSymlinksMatched {};                                             /** Number of symlinks matching the search pattern */
+static uint64_t         sNumSpecialMatched  {};                                             /** Number of special files matching the search pattern */
+static uint64_t         sNumDirsMatched     {};                                             /** Number of subdirectories matching the search pattern */
 
 static bool             sPrintSummary       {};                                             /** Flag to determine whether the summary should be printed or not */
 
-static wchar_t          *sSearchPattern     {nullptr};                                      /** Pattern to search for if any of the search options are set */
+#ifdef USE_KMP_SEARCH
+static size_t           *sLpsArray[LPS_LEN]        {};                                      /** LPS array to use */
+#endif
 
 /**
  * @brief                   Returns whether a given command line option is set or not
@@ -182,7 +191,7 @@ get_option (const uint8_t &pBit) noexcept
 /**
  * @brief                   Sets a command line option
  *
- * @param pBit              Option to clear
+ * @param pBit              Option to set
  */
 inline void
 set_option (const uint8_t &pBit) noexcept
@@ -202,14 +211,16 @@ clear_option (const uint8_t &pBit) noexcept
 }
 
 /**
- * @brief                   Create a null-terminated wide string from a regular null-terminated string
+ * @brief                   Create a null-terminated wide string (of wchar_t) from a null-terminated string (of char)
+ *
+ *                          The new string is generated and placed on the heap, and care must be taken to free it
  *
  * @param pPtr              Null-terminated String to generate a wide string from
  *
  * @return wchar_t*         Given String as a wide string
  */
 [[nodiscard]] inline wchar_t
-*create_wchar (const char *pPtr) noexcept
+*widen_string (const char *pPtr) noexcept
 {
     // setlocale (LC_CTYPE, "UTF-32");
 
@@ -266,9 +277,104 @@ parse_str_to_uint64 (const char *pPtr, uint64_t &pRes) noexcept
 }
 
 /**
- * @brief                   Prints the last modified time of a filesystem entry in a well formatted manner
+ * @brief                   Calculates and returns the size of a directory in bytes (-1 if the size can not be found out)
  *
- * @param pFsEntry          Reference to entry whose last modification time is to be printed
+ * @param pDirPath          Path to the directory whose size needs to be calculated
+ *
+ * @return int64_t          Size of the directory (-1 if size could not be calculated)
+ */
+[[nodiscard]] int64_t
+calc_dir_size (const wchar_t *pPath) noexcept
+{
+    fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
+    fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
+    fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
+
+    static bool             isDir;                                                          /** Stores whether the current entry is a directory */
+    static bool             isFile;                                                         /** Stores whether the current entry is a regular file */
+    static bool             isSymlink;                                                      /** Stores whether the current entry is a symlink */
+    static bool             isSpecial;                                                      /** Stores whether the current entry is a special file */
+
+    int64_t                 totalDirSize;                                                   /** Stores the total size of this entry */
+    int64_t                 curFileSize;                                                    /** Size of file that is being currently processed */
+
+    fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
+
+    // if an error occoured while trying to get the directory iterator, then report it here
+    if (sErrorCode.value () != 0) {
+        fwprintf (stderr,
+                    L"Error while creating directory iterator for \"%ls\" (Code %d, %s)\n",
+                    pPath,
+                    sErrorCode.value (),
+                    sErrorCode.message ().c_str ());
+
+        return -1;
+    }
+
+    // initialize the size variable
+    totalDirSize        = 0;
+
+    // iterate through all the entries within the current directory
+    for (fin = end (iter); iter != fin; ++iter) {
+
+        // get the current entry and its status
+        entry           = *iter;
+        entryStatus     = entry.status (sErrorCode);
+
+        // skip this entry if the status is not available
+        if (sErrorCode.value () != 0) {
+
+            fwprintf (stderr,
+                        L"Error while getting status of \"%ls\" (Code %d, %s)\n",
+                        entry.path ().wstring ().c_str (),
+                        sErrorCode.value (),
+                        sErrorCode.message ().c_str ());
+            continue;
+        }
+
+        // find out the type of the entry
+        isDir           = entry.is_directory ();
+        isFile          = entry.is_regular_file ();
+        isSymlink       = entry.is_symlink ();
+        isSpecial       = entry.is_other ();
+
+        if (isFile) {
+            // read the size of the current file and add it to the total size of the directory
+            // if the size can not be read, don't add it to the final size
+            curFileSize     = fs::file_size (entry, sErrorCode);
+            if (sErrorCode.value () != 0) {
+                fwprintf (stderr,
+                            L"Error while reading size of file \"%ls\" (Code %d, %s)\n",
+                            entry.path ().wstring ().c_str (),
+                            sErrorCode.value (),
+                            sErrorCode.message ().c_str ());
+            }
+            else {
+                totalDirSize    += curFileSize;
+            }
+        }
+        else if (isDir && !isSymlink) { //! make sure it is not a symlink
+            curFileSize     = calc_dir_size (entry.path ().wstring ().c_str ());
+
+            if (curFileSize != -1) {
+                totalDirSize    += curFileSize;
+            }
+        }
+        // if the file is not of a known type, skip it
+        else if (!isSpecial && !isSymlink) {
+            wprintf (L"File type of \"%ls\" can not be determined\n",
+                    entry.path ().wstring ().c_str ());
+            continue;
+        }
+    }
+
+    return totalDirSize;
+}
+
+/**
+ * @brief                   Prints the last modified time of a filesystem entry (formatted)
+ *
+ * @param pFsEntry          Filesystem entry whose last modification time should be printed
  */
 void
 print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
@@ -280,16 +386,17 @@ print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
     // get the timepoint on which it was last modified (the timepoint is on chrono::file_clock)
     lastModifTpFs   = pFsEntry.last_write_time (sErrorCode);
 
-    // if an error was generated, then report it
+    // check if the time could be read
     if (sErrorCode.value () != 0) {
         fwprintf (stderr,
                     L"Error while reading last modified time for \"%ls\" (Code %d, %s)\n",
                     pFsEntry.path ().wstring ().c_str (),
                     sErrorCode.value (),
                     sErrorCode.message ().c_str ());
+
+        // after reporting the error, put 20 blank spaces to indent the current entry
         wprintf (L"%20c", ' ');
     }
-    // format the time and print it
     else {
         // convert the time point on chrono::file_clock to a time_t object (time passed since epoch) and format it
         lastModifTime   = chrono::system_clock::to_time_t (
@@ -304,7 +411,7 @@ print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
 }
 
 /**
- * @brief                   Prints the permissions of a filesystem entry in a well formatted manner
+ * @brief                   Prints the permissions of a filesystem entry (formatted)
  *
  * @param pEntryStatus      Reference to the status of the entry whose permissions need to be printed
  */
@@ -334,8 +441,7 @@ print_permissions (const fs::file_status &pEntryStatus) noexcept
  * @param pPath             Path to the directory to scan
  * @param pLevel            The number of recursive calls of this function before the current one
  */
-template <bool sizeOnly>
-uint64_t
+void
 scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 {
     const uint64_t      indentWidth     = INDENT_COL_WIDTH * pLevel;                        /** Number of spaces to enter before printing the entry for the current function call */
@@ -350,31 +456,26 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
     fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
 
+    fs::path                filepath;                                                       /** Name of the current entry */
+    fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
+
     static bool             isDir;                                                          /** Stores whether the current entry is a directory */
     static bool             isFile;                                                         /** Stores whether the current entry is a regular file */
     static bool             isSymlink;                                                      /** Stores whether the current entry is a symlink */
     static bool             isSpecial;                                                      /** Stores whether the current entry is a special file */
 
-    uint64_t                totalDirSize;                                                   /** Stores the total size of this entry */
-
-    uint64_t                regularFileCnt;                                                 /** Number of regular files within this directory */
-    uint64_t                totalFileSize;                                                  /** Combines sizes of all files within this directory */
-    uint64_t                curFileSize;                                                    /** Size of file that is being currently processed */
+    int64_t                 totalDirSize;                                                   /** Stores the total size of this entry */
+    int64_t                 totalFileSize;                                                  /** Combines sizes of all files within this directory */
+    int64_t                 curFileSize;                                                    /** Size of file that is being currently processed */
 
     uint64_t                symlinkCnt;                                                     /** Number of symlinks in the current directory */
-
+    uint64_t                regularFileCnt;                                                 /** Number of regular files within this directory */
     uint64_t                specialCnt;                                                     /** Number of special files in the current directory */
-
     uint64_t                subdirCnt;                                                      /** Number of sub-directories in the current directory */
 
-    fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
-
-    fs::path                filepath;                                                       /** Name of the current entry */
+    fs::path                targetPath;                                                     /** Stores the path to the target of the symlink if the entry is a symlink */
 
     const char              *specialEntryType;                                              /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
-
-    fs::path                targetPath;                                                     /** Stores the path to the target of the symlink if the entry is a symlink */
-    std::wstring            targetName;                                                     /** Stores the target of the symlink if the entry is a symlink*/
 
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
@@ -387,7 +488,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             sPrintSummary   = false;
         }
 
-        return 0;
+        return;
     }
 
     // initialize all counters to 0
@@ -422,81 +523,74 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         isSymlink       = entry.is_symlink ();
         isSpecial       = entry.is_other ();
 
-        if constexpr (!sizeOnly) {
-            if (get_option (SHOW_ABSNOINDENT)) {
-                // filepath    = fs::absolute (filepath);
-                filepath    = fs::canonical (filepath, sErrorCode);
+        if (get_option (SHOW_ABSNOINDENT)) {
+            // filepath    = fs::absolute (filepath);
+            filepath    = fs::canonical (filepath, sErrorCode);
+            if (sErrorCode.value () != 0) {
+                fwprintf (stderr,
+                            L"Error while converting filepath to canonical value for \"%ls\" (Code %d, %s)\n",
+                            filepath.wstring ().c_str (),
+                            sErrorCode.value (),
+                            sErrorCode.message ().c_str ());
+            }
+
+            continue;
+        }
+        else if (get_option (SHOW_RELNOINDENT)) {
+
+            if (isSymlink) {
+                filepath    = filepath.filename ();
+            }
+            else {
+                filepath    = fs::relative (filepath, sErrorCode);
                 if (sErrorCode.value () != 0) {
                     fwprintf (stderr,
-                                L"Error while converting filepath to canonical value for \"%ls\" (Code %d, %s)\n",
-                                filepath.wstring ().c_str (),
-                                sErrorCode.value (),
-                                sErrorCode.message ().c_str ());
+                            L"Error while converting filepath to relative value for \"%ls\" (Code %d, %s)\n",
+                            filepath.wstring ().c_str (),
+                            sErrorCode.value (),
+                            sErrorCode.message ().c_str ());
                 }
-
-                continue;
             }
-            else if (get_option (SHOW_RELNOINDENT)) {
 
-                if (isSymlink) {
-                    filepath    = filepath.filename ();
-                }
-                else {
-                    filepath    = fs::relative (filepath, sErrorCode);
-                    if (sErrorCode.value () != 0) {
-                        fwprintf (stderr,
-                                L"Error while converting filepath to relative value for \"%ls\" (Code %d, %s)\n",
-                                filepath.wstring ().c_str (),
-                                sErrorCode.value (),
-                                sErrorCode.message ().c_str ());
-                    }
-                }
-
-                continue;
-            }
+            continue;
         }
 
         if (isSymlink) {
-            if constexpr (!sizeOnly) {
-                ++symlinkCnt;
+            ++symlinkCnt;
 
-                if (get_option (SHOW_SYMLINKS)) {
-                    if (get_option (SHOW_PERMISSIONS)) {
-                        print_permissions (entryStatus);
-                    }
+            if (get_option (SHOW_SYMLINKS)) {
+                if (get_option (SHOW_PERMISSIONS)) {
+                    print_permissions (entryStatus);
+                }
 
-                    if (get_option (SHOW_LASTTIME)) {
-                        wprintf (L"%20c", '-');
-                    }
+                if (get_option (SHOW_LASTTIME)) {
+                    wprintf (L"%20c", '-');
+                }
 
-                    targetPath  = fs::read_symlink (entry, sErrorCode);
+                targetPath  = fs::read_symlink (entry, sErrorCode);
 
-                    if (sErrorCode.value () != 0) {
-                        fwprintf (stderr,
-                                    L"Error while reading target of symlink \"%ls\" (Code %d, %s)\n",
+                if (sErrorCode.value () != 0) {
+                    fwprintf (stderr,
+                                L"Error while reading target of symlink \"%ls\" (Code %d, %s)\n",
+                                filepath.wstring ().c_str (),
+                                sErrorCode.value (),
+                                sErrorCode.message ().c_str ());
+                }
+                else {
+
+                    if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                        wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
+                                    "SYMLINK",
                                     filepath.wstring ().c_str (),
-                                    sErrorCode.value (),
-                                    sErrorCode.message ().c_str ());
+                                    targetPath.wstring ().c_str ());
                     }
                     else {
-
-                        targetName  = targetPath.wstring ();
-
-                        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                            wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
-                                        "SYMLINK",
-                                        filepath.wstring ().c_str (),
-                                        targetName.c_str ());
-                        }
-                        else {
-                            wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
-                                        "SYMLINK",
-                                        indentWidth,
-                                        ' ',
-                                        filepath.filename ().wstring ().c_str (),
-                                        targetName.c_str ());
-                        }
+                        wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
+                                    "SYMLINK",
+                                    indentWidth,
+                                    ' ',
+                                    filepath.filename ().wstring ().c_str (),
+                                    targetPath.wstring ().c_str ());
                     }
                 }
             }
@@ -517,93 +611,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 isFile      = false;
             }
             else {
-            totalFileSize   += curFileSize;
-            totalDirSize    += curFileSize;
-            }
-
-            if constexpr (!sizeOnly) {
-                ++regularFileCnt;
-                if (get_option (SHOW_FILES)) {
-
-                    if (get_option (SHOW_PERMISSIONS)) {
-                        print_permissions (entryStatus);
-                    }
-
-                    if (get_option (SHOW_LASTTIME)) {
-                        print_last_modif_time (entry);
-                    }
-
-                    // if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
-                    if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                        wprintf (L"%16lld    %ls\n",
-                                    curFileSize,
-                                    filepath.wstring ().c_str ());
-                    }
-                    else {
-                        wprintf (L"%16lld    %-*c%ls\n",
-                                    curFileSize,
-                                    indentWidth,
-                                    ' ',
-                                    filepath.filename ().wstring ().c_str ());
-                    }
-                }
-            }
-        }
-        else if (isSpecial) {
-            if constexpr (!sizeOnly) {
-
-                ++specialCnt;
-
-                if (get_option (SHOW_SPECIAL)) {
-                    specialEntryType    = "SPECIAL";
-
-                    if (entry.is_socket ()) {
-                        specialEntryType    = "SOCKET";
-                    }
-                    else if (entry.is_block_file ()) {
-                        specialEntryType    = "BLOCK DEVICE";
-                    }
-                    else if (entry.is_fifo ()) {
-                        specialEntryType    = "FIFO PIPE";
-                    }
-
-                    if (get_option (SHOW_PERMISSIONS)) {
-                        print_permissions (entryStatus);
-                    }
-
-                    if (get_option (SHOW_LASTTIME)) {
-                        wprintf (L"%24c", ' ');
-                    }
-
-                    if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                        wprintf (L"%16s    %ls\n",
-                                    specialEntryType,
-                                    filepath.wstring ().c_str ());
-                    }
-                    else {
-                        wprintf (L"%16s    %-*c%ls\n",
-                                    specialEntryType,
-                                    indentWidth,
-                                    ' ',
-                                    filepath.filename ().wstring ().c_str ());
-                    }
-                }
-            }
-        }
-        else if (isDir) {
-
-            ++subdirCnt;
-
-            //! use size of inode structure
-            if (get_option (SHOW_DIR_SIZE)) {
-                curFileSize     = scan_path <true> (entry.path ().wstring ().c_str (), 0);
+                totalFileSize   += curFileSize;
                 totalDirSize    += curFileSize;
             }
-            else {
-                curFileSize     = -1;
-            }
 
-            if constexpr (!sizeOnly) {
+            ++regularFileCnt;
+            if (get_option (SHOW_FILES)) {
 
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
@@ -613,23 +626,99 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     print_last_modif_time (entry);
                 }
 
+                // if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
                 if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                    wprintf (L"%16lld    <%ls>\n",
+                    wprintf (L"%16lld    %ls\n",
                                 curFileSize,
                                 filepath.wstring ().c_str ());
                 }
                 else {
-                    wprintf (L"%16lld    %-*c<%ls>\n",
+                    wprintf (L"%16lld    %-*c%ls\n",
                                 curFileSize,
                                 indentWidth,
                                 ' ',
                                 filepath.filename ().wstring ().c_str ());
                 }
+            }
+        }
+        else if (isSpecial) {
+            ++specialCnt;
 
-                if (get_option (SHOW_RECURSIVE)) {
-                    if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
-                        scan_path<sizeOnly> (entry.path ().wstring ().c_str (), 1 + pLevel);
-                    }
+            if (get_option (SHOW_SPECIAL)) {
+                specialEntryType    = "SPECIAL";
+
+                if (entry.is_socket ()) {
+                    specialEntryType    = "SOCKET";
+                }
+                else if (entry.is_block_file ()) {
+                    specialEntryType    = "BLOCK DEVICE";
+                }
+                else if (entry.is_fifo ()) {
+                    specialEntryType    = "FIFO PIPE";
+                }
+
+                if (get_option (SHOW_PERMISSIONS)) {
+                    print_permissions (entryStatus);
+                }
+
+                if (get_option (SHOW_LASTTIME)) {
+                    wprintf (L"%24c", ' ');
+                }
+
+                if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                    wprintf (L"%16s    %ls\n",
+                                specialEntryType,
+                                filepath.wstring ().c_str ());
+                }
+                else {
+                    wprintf (L"%16s    %-*c%ls\n",
+                                specialEntryType,
+                                indentWidth,
+                                ' ',
+                                filepath.filename ().wstring ().c_str ());
+                }
+            }
+        }
+        else if (isDir) {
+
+            ++subdirCnt;
+
+            //! use size of inode structure
+            if (get_option (SHOW_DIR_SIZE)) {
+                curFileSize     = calc_dir_size (entry.path ().wstring ().c_str ());
+            }
+            else {
+                curFileSize     = -1;
+            }
+
+            if (curFileSize != -1) {
+                totalDirSize    += curFileSize;
+            }
+
+            if (get_option (SHOW_PERMISSIONS)) {
+                print_permissions (entryStatus);
+            }
+
+            if (get_option (SHOW_LASTTIME)) {
+                print_last_modif_time (entry);
+            }
+
+            if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                wprintf (L"%16lld    <%ls>\n",
+                            curFileSize,
+                            filepath.wstring ().c_str ());
+            }
+            else {
+                wprintf (L"%16lld    %-*c<%ls>\n",
+                            curFileSize,
+                            indentWidth,
+                            ' ',
+                            filepath.filename ().wstring ().c_str ());
+            }
+
+            if (get_option (SHOW_RECURSIVE)) {
+                if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
+                    scan_path (filepath.wstring ().c_str (), 1 + pLevel);
                 }
             }
         }
@@ -641,12 +730,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
     }
 
-    if constexpr (!sizeOnly) {
-        sNumFilesTotal      += regularFileCnt;
-        sNumSymlinksTotal   += symlinkCnt;
-        sNumSpecialTotal    += specialCnt;
-        sNumDirsTotal       += subdirCnt;
-    }
+    sNumFilesTotal      += regularFileCnt;
+    sNumSymlinksTotal   += symlinkCnt;
+    sNumSpecialTotal    += specialCnt;
+    sNumDirsTotal       += subdirCnt;
 
     if (pLevel == 0) {
         sNumFilesRoot       += regularFileCnt;
@@ -657,108 +744,104 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
     // scanning is complete, now print the summary of the current directory if this function call was not for scanning
 
-    if constexpr (!sizeOnly) {
+    // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
+    if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
 
-        // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
-        if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
-
-            // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-            if (get_option (SHOW_PERMISSIONS)) {
-                wprintf (L"            ");
-            }
-            if (get_option (SHOW_LASTTIME)) {
-                wprintf (L"%20c", ' ');
-            }
-
-            // if either of the noindent options were set, then dont print the indentations for this directory
-            // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-            if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                wprintf (L"%16lld    %-*c<%llu files>\n",
-                            totalFileSize,
-                            (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
-                            ' ',
-                            regularFileCnt);
-            }
-            else {
-                wprintf (L"%16lld    %-*c<%llu files>\n",
-                            totalFileSize,
-                            indentWidth,
-                            ' ',
-                            regularFileCnt);
-            }
-
+        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
+        if (get_option (SHOW_PERMISSIONS)) {
+            wprintf (L"            ");
         }
-        // if the current dir has some symlinks and the show symlinks option was not set (they were not displayed), then print the number of symlinks atleast
-        if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
-
-            // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-            if (get_option (SHOW_PERMISSIONS)) {
-                wprintf (L"            ");
-            }
-            if (get_option (SHOW_LASTTIME)) {
-                wprintf (L"%20c", ' ');
-            }
-
-            // if either of the noindent options were set, then dont print the indentations for this directory
-            // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-            if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                wprintf (L"%16c    %-*c<%llu symlinks>\n",
-                            '-',
-                            (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
-                            ' ',
-                            symlinkCnt);
-            }
-            else {
-                wprintf (L"%16c    %-*c<%llu symlinks>\n",
-                            '-',
-                            indentWidth,
-                            ' ',
-                            symlinkCnt);
-            }
-
+        if (get_option (SHOW_LASTTIME)) {
+            wprintf (L"%20c", ' ');
         }
-        // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
-        if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
 
-            // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
-            if (get_option (SHOW_PERMISSIONS)) {
-                wprintf (L"            ");
-            }
-            if (get_option (SHOW_LASTTIME)) {
-                wprintf (L"%20c", ' ');
-            }
+        // if either of the noindent options were set, then dont print the indentations for this directory
+        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            wprintf (L"%16lld    %-*c<%llu files>\n",
+                        totalFileSize,
+                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
+                        ' ',
+                        regularFileCnt);
+        }
+        else {
+            wprintf (L"%16lld    %-*c<%llu files>\n",
+                        totalFileSize,
+                        indentWidth,
+                        ' ',
+                        regularFileCnt);
+        }
 
-            // if either of the noindent options were set, then dont print the indentations for this directory
-            // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-            if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-                wprintf (L"%16c    %-*c<%llu special entries>\n",
-                            '-',
-                            (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
-                            ' ',
-                            specialCnt);
-            }
-            else {
-                wprintf (L"%16c    %-*c<%llu special entries>\n",
-                            '-',
-                            indentWidth,
-                            ' ',
-                            specialCnt);
-            }
+    }
+    // if the current dir has some symlinks and the show symlinks option was not set (they were not displayed), then print the number of symlinks atleast
+    if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
+
+        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
+        if (get_option (SHOW_PERMISSIONS)) {
+            wprintf (L"            ");
+        }
+        if (get_option (SHOW_LASTTIME)) {
+            wprintf (L"%20c", ' ');
+        }
+
+        // if either of the noindent options were set, then dont print the indentations for this directory
+        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            wprintf (L"%16c    %-*c<%llu symlinks>\n",
+                        '-',
+                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
+                        ' ',
+                        symlinkCnt);
+        }
+        else {
+            wprintf (L"%16c    %-*c<%llu symlinks>\n",
+                        '-',
+                        indentWidth,
+                        ' ',
+                        symlinkCnt);
+        }
+
+    }
+    // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
+    if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
+
+        // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
+        if (get_option (SHOW_PERMISSIONS)) {
+            wprintf (L"            ");
+        }
+        if (get_option (SHOW_LASTTIME)) {
+            wprintf (L"%20c", ' ');
+        }
+
+        // if either of the noindent options were set, then dont print the indentations for this directory
+        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            wprintf (L"%16c    %-*c<%llu special entries>\n",
+                        '-',
+                        (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
+                        ' ',
+                        specialCnt);
+        }
+        else {
+            wprintf (L"%16c    %-*c<%llu special entries>\n",
+                        '-',
+                        indentWidth,
+                        ' ',
+                        specialCnt);
         }
     }
 
-    return totalDirSize;
+    return;
 }
 
 /**
- * @brief
+ * @brief                   Scans throug a directory and prints entries that match the given pattern and search mode
  *
- * @tparam sizeOnly
- * @param pPath
- * @param pLevel
+ * @param pPath             Path to the directory to scan
+ * @param pLevel            The number of recursive calls of this function before the current one
  */
 void
-scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
+search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 {
     if (pPath == nullptr) {
         fwprintf (stderr, L"Path can not be NULL");
@@ -776,7 +859,6 @@ scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
     static bool             isMatch;                                                        /** Stores whether the current entry matches the search pattern */
 
-    // uint64_t                totalDirSize;                                                   /** Stores the total size of this entry */
     uint64_t                curFileSize;                                                    /** Size of file that is being currently processed */
 
     fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
@@ -786,7 +868,6 @@ scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     const char              *specialEntryType;                                              /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
 
     fs::path                targetPath;                                                     /** Stores the path to the target of the symlink if the entry is a symlink */
-    std::wstring            targetName;                                                     /** Stores the target of the symlink if the entry is a symlink*/
 
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
@@ -801,9 +882,6 @@ scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         return;
     }
-
-    // initialize all counters to 0
-    // totalDirSize        = 0;
 
     for (fin = end (iter); iter != fin; ++iter) {
 
@@ -831,59 +909,58 @@ scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         isMatch         = false;
 
         if (isSymlink) {
-            ++sNumSymlinksTrav;
+            ++sNumSymlinksTotal;
         }
         else if (isFile) {
-            ++sNumFilesTrav;
+            ++sNumFilesTotal;
         }
         else if (isSpecial) {
-            ++sNumSpecialTrav;
+            ++sNumSpecialTotal;
         }
         else if (isDir) {
-            ++sNumDirsTrav;
+            ++sNumDirsTotal;
         }
         else {
             ++sErrorEntries;
         }
 
         if (get_option (SEARCH_EXACT)) {
-
             isMatch = filepath.filename ().wstring () == sSearchPattern;
 
             if (isMatch) {
-                if (isDir) {
-                    ++sNumDirsTotal;
+                if (isSymlink && get_option (SHOW_SYMLINKS)) {
+                    ++sNumSymlinksMatched;
                 }
                 else if (isFile && get_option (SHOW_FILES)) {
-                    ++sNumFilesTotal;
-                }
-                else if (isSymlink && get_option (SHOW_SYMLINKS)) {
-                    ++sNumSymlinksTotal;
+                    ++sNumFilesMatched;
                 }
                 else if (isSpecial && get_option (SHOW_SPECIAL)) {
-                    ++sNumSpecialTotal;
+                    ++sNumSpecialMatched;
+                }
+                else if (isDir) {
+                    ++sNumDirsMatched;
                 }
                 else {
                     isMatch = false;
                 }
             }
-
         }
+
         else if (get_option (SEARCH_NOEXT)) {
             isMatch = filepath.stem ().wstring () == sSearchPattern;
 
             if (isMatch) {
-                if (isDir) {
-                    ++sNumDirsTotal;
+                if (isSymlink && get_option (SHOW_SYMLINKS)) {
+                    ++sNumSymlinksMatched;
                 }
                 else if (isFile && get_option (SHOW_FILES)) {
-                    ++sNumFilesTotal;
-                }
-                else if (isSymlink && get_option (SHOW_SYMLINKS)) {
-                    ++sNumSymlinksTotal;
+                    ++sNumFilesMatched;
                 }
                 else if (isSpecial && get_option (SHOW_SPECIAL)) {
-                    ++sNumSpecialTotal;
+                    ++sNumSpecialMatched;
+                }
+                else if (isDir) {
+                    ++sNumDirsMatched;
                 }
                 else {
                     isMatch = false;
@@ -915,15 +992,13 @@ scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 }
 
                 if (isSymlink) {
-
                     wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
                                 "SYMLINK",
                                 filepath.wstring ().c_str (),
-                                targetName.c_str ());
+                                targetPath.wstring ().c_str ());
                 }
 
                 else if (isFile) {
-
                     curFileSize     = fs::file_size (entry, sErrorCode);
 
                     if (sErrorCode.value () != 0) {
@@ -935,7 +1010,6 @@ scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
                         // if the size can not be read, set the isFile flag to false to indicate a failed read
                         curFileSize = -1;
-                        isFile      = false;
                     }
 
                     wprintf (L"%16lld    %ls\n",
@@ -969,10 +1043,11 @@ scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                                 filepath.wstring ().c_str ());
                 }
 
-                if (isDir) {
+                else if (isDir) {
 
                     if (get_option (SHOW_DIR_SIZE)) {
-                        curFileSize = scan_path<true> (entry.path ().wstring ().c_str (), 0);
+                        // curFileSize = scan_path<true> (entry.path ().wstring ().c_str (), 0);
+                        curFileSize = calc_dir_size (entry.path ().wstring ().c_str ());
                     }
                     else {
                         curFileSize = -1;
@@ -986,9 +1061,9 @@ scan_path_search (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         }
 
-        if (isDir && !isSymlink) {
+        if (isDir && !isSymlink && get_option (SHOW_RECURSIVE)) {
             if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
-                scan_path_search (entry.path ().wstring ().c_str (), 1 + pLevel);
+                search_path (entry.path ().wstring ().c_str (), 1 + pLevel);
             }
         }
     }
@@ -1004,7 +1079,7 @@ scan_path_init (const wchar_t *pPath) noexcept
 {
     sPrintSummary   = true;
 
-    scan_path<false> (pPath, 0);
+    scan_path (pPath, 0);
 
     if (!sPrintSummary) {
         return;
@@ -1034,20 +1109,34 @@ scan_path_init (const wchar_t *pPath) noexcept
     }
 }
 
+/**
+ * @brief
+ *
+ * @param pPath
+ */
 void
-scan_path_search_init (const wchar_t *pPath) noexcept
+search_path_init (const wchar_t *pPath) noexcept
 {
     sPrintSummary   = true;
 
-    wprintf (L"Searching for %ls\n", sSearchPattern);
+    wprintf (L"Searching for %ls\n\n", sSearchPattern);
 
-    scan_path_search (pPath, 0);
+    search_path (pPath, 0);
 
     if (!sPrintSummary) {
         return;
     }
 
     wprintf (foundSum,
+                sNumFilesMatched,
+                sNumSymlinksMatched,
+                sNumSpecialMatched,
+                sNumDirsMatched,
+                sNumFilesMatched +
+                sNumSymlinksMatched +
+                sNumSpecialMatched +
+                sNumDirsMatched);
+    wprintf (TotalSum,
                 pPath,
                 sNumFilesTotal,
                 sNumSymlinksTotal,
@@ -1057,44 +1146,30 @@ scan_path_search_init (const wchar_t *pPath) noexcept
                 sNumSymlinksTotal +
                 sNumSpecialTotal +
                 sNumDirsTotal);
-    wprintf (travSum,
-                pPath,
-                sNumFilesTrav,
-                sNumSymlinksTrav,
-                sNumSpecialTrav,
-                sNumDirsTrav,
-                sNumFilesTrav +
-                sNumSymlinksTrav +
-                sNumSpecialTrav +
-                sNumDirsTrav);
 }
 
 
 int
 main (int argc, char *argv[]) noexcept
 {
-    const char          *initPathStr;                                                       /** Path to start the scan process from, represneted as a string of chars */
-    wchar_t             *initPathWstr;                                                      /** Path to start the scan process from, represented as a string of wide characters */
-    const char          *searchPattern;                                                     /** Pattern to search for if any of the search option are set (equals nullptr when no search option is set) */
+    const char          *initPathStr;                                                       /** Path to start the scan process from, as a narrow string */
+    const char          *searchPattern;                                                     /** Pattern to search for, as a narrow string */
 
-    // initialize all points to nullptr (this represnts a value that has not been provided)
+    // initialize all paths to null (represents a value that has not been provided)
     initPathStr         = nullptr;
-    initPathWstr        = nullptr;
     searchPattern       = nullptr;
 
-    // iterate through all the command line arguments
+    // iterate through all the command line arguments (except the first one, which is the name of the executable)
     for (uint64_t i = 1, argLen; i < (uint64_t)argc; ++i) {
 
-        // get the length of the current argument
+        // get the length of the current argument and ignore it if it is not greater than 0
         argLen  = strnlen (argv[i], MAX_ARG_LEN);
-
-        // if the length is not greater than 0, ignore it
         if (argLen <= 0) {
             wprintf (L"Ignoring Unknown Option of length 0\n");
             continue;
         }
 
-        // if this is the first argument (apart from the executable name), check if it is a path
+        // if this is the first argument after the executable name, check if it is a path (the first character must not be a '-')
         if (i == 1 && argv[i][0] != '-') {
             initPathStr = argv[i];
             continue;
@@ -1137,6 +1212,7 @@ main (int argc, char *argv[]) noexcept
                 set_option (SHOW_PERMISSIONS);
             }
             else if (strncmp (argv[i], "-S", 2) == 0) {
+
                 // make sure that multiple search modes are not being used simultaneously
                 if (get_option (SEARCH_NOEXT) || get_option (SEARCH_CONTAINS)) {
                     wprintf (L"Can only set one search mode at a time\n");
@@ -1266,9 +1342,6 @@ main (int argc, char *argv[]) noexcept
             if (strncmp (argv[i], "--permissions", 13) == 0) {
                 set_option (SHOW_PERMISSIONS);
             }
-            // else if (strncmp (argv[i], "--no-dir-size", 13) == 0) {
-            //     set_option (SHOW_DIR_SIZE);
-            // }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
             }
@@ -1348,20 +1421,22 @@ main (int argc, char *argv[]) noexcept
         return 0;
     }
 
-    // convert the provided path to a wide string
-    initPathWstr        = create_wchar ((initPathStr == nullptr) ? (".") : (initPathStr));
+    // convert the provided path to a wide string (if no path was provided, use the relative path to the working directory '.')
+    // it is very important to not use L"." directory, since sInitPath is freed at the end of the program
+    // using a string literal would cause wrong behaviour (possibly crash the program)
+    sInitPath           = widen_string ((initPathStr == nullptr) ? (".") : (initPathStr));
 
-    // if a search pattern was provided, then convert it to a wide string
-    sSearchPattern      = (searchPattern == nullptr) ? (nullptr) : (create_wchar (searchPattern));
-
-    if (sSearchPattern != nullptr) {
-        scan_path_search_init (initPathWstr);
+    // if a search pattern was provided, convert it to a wide string and use the search function
+    if (searchPattern != nullptr) {
+        sSearchPattern  = widen_string (searchPattern);
+        search_path_init (sInitPath);
     }
+    // if no search pattern was provided, use the regular scan function
     else {
-    scan_path_init (initPathWstr);
+        scan_path_init (sInitPath);
     }
 
-    free (initPathWstr);
+    free ((void *)sInitPath);
     free ((void *)sSearchPattern);
 
     return 0;
