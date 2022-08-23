@@ -42,8 +42,6 @@
 
 // #define USE_KMP_SEARCH          true                                                        /** Defined if Knuth Morris Prat search needs to be used */
 
-#define LPS_LEN                 (1024)                                                      /** Length of the LPS array (used in search implementations) */
-
 #define red                     "\033[0;31m"
 #define Lred                    L"\033[0;31m"
 
@@ -166,6 +164,10 @@ static const wchar_t    *TotalSum    = L"Summary of traversal of \"%ls\"\n"
 static const wchar_t    *sInitPath          {nullptr};                                      /** Initial path to start the scan from */
 static const wchar_t    *sSearchPattern     {nullptr};                                      /** Pattern to search for if any of the search options are set */
 
+#ifdef USE_KMP_SEARCH
+static uint64_t         sSearchPatternLen   {};
+#endif
+
 static uint64_t         sOptionMask         {};                                             /** Bitmask to represent command line options provided by the user */
 static std::error_code  sErrorCode          {};                                             /** Container for error code to be passed around when dealing with std::filesystem artifacts */
 
@@ -191,7 +193,7 @@ static uint64_t         sNumDirsMatched     {};                                 
 static bool             sPrintSummary       {};                                             /** Flag to determine whether the summary should be printed or not */
 
 #ifdef USE_KMP_SEARCH
-static size_t           *sLpsArray[LPS_LEN]        {};                                      /** LPS array to use */
+static uint64_t          sLpsArray[MAX_ARG_LEN]        {};                                      /** LPS array to use */
 #endif
 
 /**
@@ -274,6 +276,36 @@ clear_option (const uint8_t &pBit) noexcept
     return result;
 }
 
+#ifdef USE_KMP_SEARCH
+/**
+ * @brief
+ *
+ */
+void
+compute_lps ()
+{
+    // clear the LPS array
+    memset (sLpsArray, 0, sizeof (sLpsArray[0]) * MAX_ARG_LEN);
+
+    // sSearchPatternLen   = wstrnlen (sSearchPattern, MAX_ARG_LEN);
+
+    // build the LPS array
+    for (uint64_t i = 1, maxPrefLen = 0; i < sSearchPatternLen; ++i) {
+
+        if (sSearchPattern[i] == sSearchPattern[maxPrefLen]) {
+            sLpsArray[i]    = ++maxPrefLen;
+        }
+        else if (maxPrefLen != 0) {
+            maxPrefLen      = sLpsArray[maxPrefLen - 1];
+            --i;
+        }
+        // else {
+        //     sLpsArray[i]    = 0;
+        // }
+    }
+}
+#endif
+
 /**
  * @brief                   Checks if a given string contains the search pattern provided by the user
  *
@@ -285,13 +317,30 @@ clear_option (const uint8_t &pBit) noexcept
 bool
 check_contains (const std::wstring &pStr)
 {
+
 #ifdef USE_KMP_SEARCH
 
-    if (pStr.size () >= LPS_LEN) {
-        return pStr.find (sSearchPattern) != std::wstring::npos;
+    for (uint64_t i = 0, j = 0; (pStr.size () + j) >= (sSearchPatternLen + i); ) {
+        if (sSearchPattern[j] == pStr[i]) {
+            ++i;
+            ++j;
+        }
+
+        if (j == sSearchPatternLen) {
+            return true;
+        }
+
+        else if ((i < pStr.size ()) && (sSearchPattern[j] != pStr[i])) {
+            if (j != 0) {
+                j = sLpsArray[j - 1];
+            }
+            else {
+                ++i;
+            }
+        }
     }
 
-
+    return false;
 
 #else
     return pStr.find (sSearchPattern) != std::wstring::npos;
@@ -1440,6 +1489,18 @@ main (int argc, char *argv[]) noexcept
     // if a search pattern was provided, convert it to a wide string and use the search function
     if (searchPattern != nullptr) {
         sSearchPattern  = widen_string (searchPattern);
+
+#ifdef USE_KMP_SEARCH
+        if (get_option (SEARCH_CONTAINS)) {
+            sSearchPatternLen   = strnlen (searchPattern, MAX_ARG_LEN);
+            compute_lps ();
+
+            // for (auto &e : sLpsArray) {
+            //     fprintf (stderr, "%lu\t", e);
+            //     fprintf (stderr, "\n");
+            // }
+        }
+#endif
         search_path_init (sInitPath);
     }
     // if no search pattern was provided, use the regular scan function
