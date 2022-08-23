@@ -40,7 +40,7 @@
 
 #define INDENT_COL_WIDTH        (4)                                                         /** Number of spaces by which to further indent each subsequent nested directory's entries */
 
-// #define USE_KMP_SEARCH          1                                                           /** Defined if Knuth Morris Prat search needs to be used */
+// #define USE_KMP_SEARCH          true                                                        /** Defined if Knuth Morris Prat search needs to be used */
 
 #define LPS_LEN                 (1024)                                                      /** Length of the LPS array (used in search implementations) */
 
@@ -79,7 +79,7 @@
 
 // #define ERR_NEWL                true
 
-#ifdef ERR_NEWL
+#ifdef ERR_NEWL                                                                             /** Determines if each error entry should have empty lines before and after */
 #define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
                                             L"\n"                               \
                                             pMsg L" (Code %d, %s)\n",           \
@@ -275,6 +275,30 @@ clear_option (const uint8_t &pBit) noexcept
 }
 
 /**
+ * @brief                   Checks if a given string contains the search pattern provided by the user
+ *
+ * @param pStr              String to check
+ *
+ * @return true             If the given string contains the search pattern
+ * @return false            If the given string does not contains the search pattern
+ */
+bool
+check_contains (const std::wstring &pStr)
+{
+#ifdef USE_KMP_SEARCH
+
+    if (pStr.size () >= LPS_LEN) {
+        return pStr.find (sSearchPattern) != std::wstring::npos;
+    }
+
+
+
+#else
+    return pStr.find (sSearchPattern) != std::wstring::npos;
+#endif
+}
+
+/**
  * @brief                   Parses a null-terminated string into an unsigned 64 bit integer
  *
  * @param pPtr              Pointer to string
@@ -295,27 +319,6 @@ parse_str_to_uint64 (const char *pPtr, uint64_t &pRes) noexcept
 
     return true;
 }
-
-// /**
-//  * @brief                   Prints errors to stdout in a readable manner
-//  *
-//  * @tparam args_t           Types of the arguments to print
-//  *
-//  * @param pMsg              Message to display (including format specifiers)
-//  * @param pArgs             Arguments to print in the message
-//  */
-// template <typename... args_t>
-// void
-// show_err (const wchar_t *const pMsg, args_t... pArgs)
-// {
-//     fwprintf (stderr, L"\n");
-//     fwprintf (stderr,
-//                 pMsg, pArgs);
-//     fwprintf (stderr,
-//                 L" Code (%d, %s)\n\n",
-//                 sErrorCode.value (),
-//                 sErrorCode.message ().c_str ());
-// }
 
 /**
  * @brief                   Calculates and returns the size of a directory in bytes (-1 if the size can not be found out)
@@ -388,7 +391,7 @@ calc_dir_size (const wchar_t *pPath) noexcept
                 totalDirSize    += curFileSize;
             }
         }
-        else if (isDir && !isSymlink) { //! make sure it is not a symlink
+        else if (isDir && !isSymlink) {
             curFileSize     = calc_dir_size (entry.path ().wstring ().c_str ());
 
             if (curFileSize != -1) {
@@ -712,7 +715,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             ++subdirCnt;
 
-            //! use size of inode structure
             if (get_option (SHOW_DIR_SIZE)) {
                 curFileSize     = calc_dir_size (entry.path ().wstring ().c_str ());
             }
@@ -814,7 +816,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
 
         // if either of the noindent options were set, then dont print the indentations for this directory
-        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
         if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
             wprintf (L"%16c    %-*c<%llu symlinks>\n",
                         '-',
@@ -843,7 +844,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
 
         // if either of the noindent options were set, then dont print the indentations for this directory
-        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
         if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
             wprintf (L"%16c    %-*c<%llu special entries>\n",
                         '-',
@@ -952,49 +952,30 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         if (get_option (SEARCH_EXACT)) {
             isMatch = filepath.filename ().wstring () == sSearchPattern;
-
-            if (isMatch) {
-                if (isSymlink && get_option (SHOW_SYMLINKS)) {
-                    ++sNumSymlinksMatched;
-                }
-                else if (isFile && get_option (SHOW_FILES)) {
-                    ++sNumFilesMatched;
-                }
-                else if (isSpecial && get_option (SHOW_SPECIAL)) {
-                    ++sNumSpecialMatched;
-                }
-                else if (isDir) {
-                    ++sNumDirsMatched;
-                }
-                else {
-                    isMatch = false;
-                }
-            }
         }
-
         else if (get_option (SEARCH_NOEXT)) {
             isMatch = filepath.stem ().wstring () == sSearchPattern;
-
-            if (isMatch) {
-                if (isSymlink && get_option (SHOW_SYMLINKS)) {
-                    ++sNumSymlinksMatched;
-                }
-                else if (isFile && get_option (SHOW_FILES)) {
-                    ++sNumFilesMatched;
-                }
-                else if (isSpecial && get_option (SHOW_SPECIAL)) {
-                    ++sNumSpecialMatched;
-                }
-                else if (isDir) {
-                    ++sNumDirsMatched;
-                }
-                else {
-                    isMatch = false;
-                }
-            }
         }
         else { //!
+            isMatch = check_contains (filepath.filename ().wstring ());
+        }
 
+        if (isMatch) {
+            if (isSymlink && get_option (SHOW_SYMLINKS)) {
+                ++sNumSymlinksMatched;
+            }
+            else if (isFile && get_option (SHOW_FILES)) {
+                ++sNumFilesMatched;
+            }
+            else if (isSpecial && get_option (SHOW_SPECIAL)) {
+                ++sNumSpecialMatched;
+            }
+            else if (isDir) {
+                ++sNumDirsMatched;
+            }
+            else {
+                isMatch = false;
+            }
         }
 
         if (isMatch) {
