@@ -30,8 +30,9 @@
 #define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
 
 #define SHOW_DIR_SIZE           (12)                                                        /** Option that specifies if directory sizes should be recursively calculated and shown */
+#define SHOW_ERRORS             (13)
 
-#define HELP                    (13)                                                        /** Option that specifies if usage instructions need to be printed */
+#define HELP                    (14)                                                        /** Option that specifies if usage instructions need to be printed */
 
 #define MAX_ARG_LEN             (32)                                                        /** Maximum allowed length of an argument (other than the path) after which it is not checked further */
 #define MAX_PATH_LEN            (256)                                                       /** Maximum allowed length of the provided path after which any further characters are ignored */
@@ -76,6 +77,24 @@
 #define NO_CLR                  "\033[0m"
 #define LNO_CLR                 L"\033[0m"
 
+// #define ERR_NEWL                true
+
+#ifdef ERR_NEWL
+#define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
+                                            L"\n"                               \
+                                            pMsg L" (Code %d, %s)\n",           \
+                                            L"\n",                              \
+                                            __VA_ARGS__,                        \
+                                            sErrorCode.value (),                \
+                                            sErrorCode.message ().c_str ());                /** Macro to print errors in a well formatted manner */
+#else
+#define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
+                                            pMsg L" (Code %d, %s)\n",           \
+                                            __VA_ARGS__,                        \
+                                            sErrorCode.value (),                \
+                                            sErrorCode.message ().c_str ());                /** Macro to print errors in a well formatted manner */
+#endif
+
 namespace fs                    = std::filesystem;
 namespace chrono                = std::chrono;
 
@@ -103,6 +122,7 @@ static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
                                     L"\n"
                                     L"-h, --help                  Print Usage Instructions\n"
                                     L"    --recursive-dir-size    Use the size of the inode structure of a directory rather than recursively going inside to check it\n"
+                                    L"-e, --show-err              Show errors\n"
                                     L"\n";
 
 /** Unformatted summary string for directory to Totalerse (not including subdirectories) */
@@ -276,6 +296,27 @@ parse_str_to_uint64 (const char *pPtr, uint64_t &pRes) noexcept
     return true;
 }
 
+// /**
+//  * @brief                   Prints errors to stdout in a readable manner
+//  *
+//  * @tparam args_t           Types of the arguments to print
+//  *
+//  * @param pMsg              Message to display (including format specifiers)
+//  * @param pArgs             Arguments to print in the message
+//  */
+// template <typename... args_t>
+// void
+// show_err (const wchar_t *const pMsg, args_t... pArgs)
+// {
+//     fwprintf (stderr, L"\n");
+//     fwprintf (stderr,
+//                 pMsg, pArgs);
+//     fwprintf (stderr,
+//                 L" Code (%d, %s)\n\n",
+//                 sErrorCode.value (),
+//                 sErrorCode.message ().c_str ());
+// }
+
 /**
  * @brief                   Calculates and returns the size of a directory in bytes (-1 if the size can not be found out)
  *
@@ -302,12 +343,10 @@ calc_dir_size (const wchar_t *pPath) noexcept
 
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
-        fwprintf (stderr,
-                    L"Error while creating directory iterator for \"%ls\" (Code %d, %s)\n",
-                    pPath,
-                    sErrorCode.value (),
-                    sErrorCode.message ().c_str ());
-
+        if (get_option (SHOW_ERRORS)) {
+            SHOW_ERR (L"Error while creating directory iterator for \"%ls\"",
+                    pPath);
+        }
         return -1;
     }
 
@@ -323,12 +362,9 @@ calc_dir_size (const wchar_t *pPath) noexcept
 
         // skip this entry if the status is not available
         if (sErrorCode.value () != 0) {
-
-            fwprintf (stderr,
-                        L"Error while getting status of \"%ls\" (Code %d, %s)\n",
-                        entry.path ().wstring ().c_str (),
-                        sErrorCode.value (),
-                        sErrorCode.message ().c_str ());
+            if (get_option (SHOW_ERRORS)) {
+                SHOW_ERR (L"Error while getting status of \"%ls\"", entry.path ().wstring ().c_str ());
+            }
             continue;
         }
 
@@ -343,11 +379,10 @@ calc_dir_size (const wchar_t *pPath) noexcept
             // if the size can not be read, don't add it to the final size
             curFileSize     = fs::file_size (entry, sErrorCode);
             if (sErrorCode.value () != 0) {
-                fwprintf (stderr,
-                            L"Error while reading size of file \"%ls\" (Code %d, %s)\n",
-                            entry.path ().wstring ().c_str (),
-                            sErrorCode.value (),
-                            sErrorCode.message ().c_str ());
+                if (get_option (SHOW_ERRORS)) {
+                    SHOW_ERR (L"Error while reading size of file \"%ls\"",
+                                entry.path ().wstring ().c_str ());
+                }
             }
             else {
                 totalDirSize    += curFileSize;
@@ -388,12 +423,10 @@ print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
 
     // check if the time could be read
     if (sErrorCode.value () != 0) {
-        fwprintf (stderr,
-                    L"Error while reading last modified time for \"%ls\" (Code %d, %s)\n",
-                    pFsEntry.path ().wstring ().c_str (),
-                    sErrorCode.value (),
-                    sErrorCode.message ().c_str ());
-
+        if (get_option (SHOW_ERRORS)) {
+            SHOW_ERR (L"Error while reading last modified time for \"%ls\"",
+                        pFsEntry.path ().wstring ().c_str ());
+        }
         // after reporting the error, put 20 blank spaces to indent the current entry
         wprintf (L"%20c", ' ');
     }
@@ -479,12 +512,14 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
-        fwprintf (stderr,
-                    L"Error while creating directory iterator for \"%ls\" (Code %d, %s)\n",
-                    pPath,
-                    sErrorCode.value (),
-                    sErrorCode.message ().c_str ());
+        if (get_option (SHOW_ERRORS)) {
+            SHOW_ERR (L"Error iterating over \"%ls\"",
+                        pPath);
+        }
         if (pLevel == 0) {
+            if (!get_option (SHOW_ERRORS)) {
+                wprintf (L"Error iterating over \"%ls\"", pPath);
+            }
             sPrintSummary   = false;
         }
 
@@ -508,11 +543,9 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         entryStatus     = entry.status (sErrorCode);
 
         if (sErrorCode.value () != 0) {
-            fwprintf (stderr,
-                        L"Error while getting status of \"%ls\" (Code %d, %s)\n",
-                        filepath.wstring ().c_str (),
-                        sErrorCode.value (),
-                        sErrorCode.message ().c_str ());
+            if (get_option (SHOW_ERRORS)) {
+                SHOW_ERR (L"Error while getting status of \"%ls\"", filepath.wstring ().c_str ());
+            }
             continue;
         }
 
@@ -527,11 +560,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             // filepath    = fs::absolute (filepath);
             filepath    = fs::canonical (filepath, sErrorCode);
             if (sErrorCode.value () != 0) {
-                fwprintf (stderr,
-                            L"Error while converting filepath to canonical value for \"%ls\" (Code %d, %s)\n",
-                            filepath.wstring ().c_str (),
-                            sErrorCode.value (),
-                            sErrorCode.message ().c_str ());
+                if (get_option (SHOW_ERRORS)) {
+                    SHOW_ERR (L"Error while converting filepath to canonical value for \"%ls\"",
+                                filepath.wstring ().c_str ());
+                }
             }
 
             continue;
@@ -544,11 +576,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             else {
                 filepath    = fs::relative (filepath, sErrorCode);
                 if (sErrorCode.value () != 0) {
-                    fwprintf (stderr,
-                            L"Error while converting filepath to relative value for \"%ls\" (Code %d, %s)\n",
-                            filepath.wstring ().c_str (),
-                            sErrorCode.value (),
-                            sErrorCode.message ().c_str ());
+                    if (get_option (SHOW_ERRORS)) {
+                        SHOW_ERR (L"Error while converting filepath to relative value for \"%ls\"",
+                                filepath.wstring ().c_str ());
+                    }
                 }
             }
 
@@ -570,11 +601,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 targetPath  = fs::read_symlink (entry, sErrorCode);
 
                 if (sErrorCode.value () != 0) {
-                    fwprintf (stderr,
-                                L"Error while reading target of symlink \"%ls\" (Code %d, %s)\n",
-                                filepath.wstring ().c_str (),
-                                sErrorCode.value (),
-                                sErrorCode.message ().c_str ());
+                    if (get_option (SHOW_ERRORS)) {
+                        SHOW_ERR (L"Error while reading target of symlink \"%ls\"",
+                                    filepath.wstring ().c_str ());
+                    }
                 }
                 else {
 
@@ -600,11 +630,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             curFileSize     = fs::file_size (entry, sErrorCode);
 
             if (sErrorCode.value () != 0) {
-                fwprintf (stderr,
-                            L"Error while reading size of file \"%ls\" (Code %d, %s)\n",
-                            filepath.wstring ().c_str (),
-                            sErrorCode.value (),
-                            sErrorCode.message ().c_str ());
+                if (get_option (SHOW_ERRORS)) {
+                    SHOW_ERR (L"Error while reading size of file \"%ls\"",
+                                filepath.wstring ().c_str ());
+                }
 
                 // if the size can not be read, set the isFile flag to false to indicate a failed read
                 curFileSize = -1;
@@ -871,11 +900,10 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
-        fwprintf (stderr,
-                    L"Error while creating directory iterator for \"%ls\" (Code %d, %s)\n",
-                    pPath,
-                    sErrorCode.value (),
-                    sErrorCode.message ().c_str ());
+        if (get_option (SHOW_ERRORS)) {
+            SHOW_ERR (L"Error while creating directory iterator for \"%ls\"",
+                        pPath);
+        }
         if (pLevel == 0) {
             sPrintSummary   = false;
         }
@@ -891,11 +919,9 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         entryStatus     = entry.status (sErrorCode);
 
         if (sErrorCode.value () != 0) {
-            fwprintf (stderr,
-                        L"Error while getting status of \"%ls\" (Code %d, %s)\n",
-                        filepath.wstring ().c_str (),
-                        sErrorCode.value (),
-                        sErrorCode.message ().c_str ());
+            if (get_option (SHOW_ERRORS)) {
+                SHOW_ERR (L"Error while getting status of \"ls\"", filepath.wstring ().c_str ());
+            }
             continue;
         }
 
@@ -975,11 +1001,10 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
             filepath    = fs::canonical (filepath, sErrorCode);
             if (sErrorCode.value () != 0) {
-                fwprintf (stderr,
-                            L"Error while converting filepath to canonical value for \"%ls\" (Code %d, %s)\n",
-                            filepath.wstring ().c_str (),
-                            sErrorCode.value (),
-                            sErrorCode.message ().c_str ());
+                if (get_option (SHOW_ERRORS)) {
+                    SHOW_ERR (L"Error while converting filepath to canonical value for \"%ls\"",
+                                filepath.wstring ().c_str ());
+                }
             }
 
             else {
@@ -1002,11 +1027,10 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     curFileSize     = fs::file_size (entry, sErrorCode);
 
                     if (sErrorCode.value () != 0) {
-                        fwprintf (stderr,
-                                    L"Error while reading size of file \"%ls\" (Code %d, %s)\n",
-                                    filepath.wstring ().c_str (),
-                                    sErrorCode.value (),
-                                    sErrorCode.message ().c_str ());
+                        if (get_option (SHOW_ERRORS)) {
+                            SHOW_ERR (L"Error while reading size of file \"%ls\"",
+                                        filepath.wstring ().c_str ());
+                        }
 
                         // if the size can not be read, set the isFile flag to false to indicate a failed read
                         curFileSize = -1;
@@ -1232,6 +1256,9 @@ main (int argc, char *argv[]) noexcept
                 set_option (SEARCH_EXACT);
                 searchPattern = argv[++i];
             }
+            else if (strncmp (argv[i], "-e", 2) == 0) {
+                set_option (SHOW_ERRORS);
+            }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
             }
@@ -1314,6 +1341,9 @@ main (int argc, char *argv[]) noexcept
                 // set the option and skip the next argument (that is the search pattern)
                 set_option (SEARCH_CONTAINS);
                 searchPattern = argv[++i];
+            }
+            else if (strncmp (argv[i], "--hide-err", 10) == 0) {
+                set_option (SHOW_ERRORS);
             }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
