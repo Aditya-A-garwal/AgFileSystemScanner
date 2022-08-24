@@ -606,8 +606,10 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         isSpecial       = entry.is_other ();
 
         if (get_option (SHOW_ABSNOINDENT)) {
-            // filepath    = fs::absolute (filepath);
-            filepath    = fs::canonical (filepath, sErrorCode);
+
+            // if the entry is a symlink, it is necessary to use the absolute path as the canonical path will evaluate and return the target
+            filepath    = (isSymlink) ? (fs::absolute (filepath, sErrorCode)) : (fs::canonical (filepath, sErrorCode));
+
             if (sErrorCode.value () != 0) {
                 if (get_option (SHOW_ERRORS)) {
                     SHOW_ERR (L"Error while converting filepath to canonical value for \"%ls\"",
@@ -742,7 +744,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             ++subdirCnt;
 
             if (get_option (SHOW_DIR_SIZE)) {
-                curFileSize     = calc_dir_size (entry.path ().wstring ().c_str ());
+                curFileSize     = calc_dir_size (filepath.wstring ().c_str ());
             }
             else {
                 curFileSize     = -1;
@@ -781,7 +783,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
         else {
             printf ("File type of \"%ls\" can not be determined\n",
-                    entry.path ().wstring ().c_str ());
+                    filepath.wstring ().c_str ());
             printf ("Terminating...\n");
             exit (-1);
         }
@@ -902,6 +904,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         std::exit (-1);
     }
 
+
     fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
     fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
     fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
@@ -923,6 +926,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
     fs::path                targetPath;                                                     /** Stores the path to the target of the symlink if the entry is a symlink */
 
+
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
         if (get_option (SHOW_ERRORS)) {
@@ -936,6 +940,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         return;
     }
 
+
     for (fin = end (iter); iter != fin; ++iter) {
 
         // get the current entry, its name and its status
@@ -945,10 +950,11 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         if (sErrorCode.value () != 0) {
             if (get_option (SHOW_ERRORS)) {
-                SHOW_ERR (L"Error while getting status of \"ls\"", filepath.wstring ().c_str ());
+                SHOW_ERR (L"Error while getting status of \"%ls\"", filepath.wstring ().c_str ());
             }
             continue;
         }
+
 
         // find out the type of the entry
         isDir           = entry.is_directory ();
@@ -1076,8 +1082,8 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 else if (isDir) {
 
                     if (get_option (SHOW_DIR_SIZE)) {
-                        // curFileSize = scan_path<true> (entry.path ().wstring ().c_str (), 0);
-                        curFileSize = calc_dir_size (entry.path ().wstring ().c_str ());
+                        // curFileSize = scan_path<true> (filepath.wstring ().c_str (), 0);
+                        curFileSize = calc_dir_size (filepath.wstring ().c_str ());
                     }
                     else {
                         curFileSize = -1;
@@ -1093,7 +1099,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         if (isDir && !isSymlink && get_option (SHOW_RECURSIVE)) {
             if ((sRecursionLevel == 0) || (pLevel < sRecursionLevel)) {
-                search_path (entry.path ().wstring ().c_str (), 1 + pLevel);
+                search_path (filepath.wstring ().c_str (), 1 + pLevel);
             }
         }
     }
