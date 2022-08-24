@@ -19,7 +19,6 @@
 #define SHOW_LASTTIME           (2)                                                         /** Option that specified if the last modification time of a file or directory should be printed */
 
 #define SHOW_ABSNOINDENT        (3)                                                         /** Option that specifies if the absoulute paths of all entries should be printed without indentation */
-#define SHOW_RELNOINDENT        (4)                                                         /** Option that specifies if the relative paths of all entries should be printed without indentation */
 
 #define SHOW_FILES              (5)                                                         /** Option that specifies if all files within a directory need to be individually displayed */
 #define SHOW_SYMLINKS           (6)                                                         /** Option that specifies if all symlinks within a directory need to be individually displayed */
@@ -29,10 +28,10 @@
 #define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */
 #define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
 
-#define SHOW_DIR_SIZE           (12)                                                        /** Option that specifies if directory sizes should be recursively calculated and shown */
-#define SHOW_ERRORS             (13)
+#define SHOW_DIR_SIZE           (11)                                                        /** Option that specifies if directory sizes should be recursively calculated and shown */
+#define SHOW_ERRORS             (12)
 
-#define HELP                    (14)                                                        /** Option that specifies if usage instructions need to be printed */
+#define HELP                    (13)                                                        /** Option that specifies if usage instructions need to be printed */
 
 #define MAX_ARG_LEN             (32)                                                        /** Maximum allowed length of an argument (other than the path) after which it is not checked further */
 #define MAX_PATH_LEN            (256)                                                       /** Maximum allowed length of the provided path after which any further characters are ignored */
@@ -107,8 +106,7 @@ static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
                                     L"-p, --permissions           Show Permissions of each entry\n"
                                     L"-t, --modification-time     Show Time of Last Modification\n"
                                     L"\n"
-                                    L"    --abs-noindent          Show the complete absoulute path without indentation\n"
-                                    L"    --rel-noindent          Show the relative path without indentation\n"
+                                    L"    --abs                   Show the complete absoulute path without indentation\n"
                                     L"\n"
                                     L"-f, --files                 Show Regular Files (normally hidden)\n"
                                     L"-l, --symlinks              Show Symlinks\n"
@@ -601,7 +599,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             continue;
         }
 
-
         // find out the type of the entry
         isDir           = entry.is_directory ();
         isFile          = entry.is_regular_file ();
@@ -617,25 +614,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                                 filepath.wstring ().c_str ());
                 }
             }
-
-            continue;
-        }
-        else if (get_option (SHOW_RELNOINDENT)) {
-
-            if (isSymlink) {
-                filepath    = filepath.filename ();
-            }
-            else {
-                filepath    = fs::relative (filepath, sErrorCode);
-                if (sErrorCode.value () != 0) {
-                    if (get_option (SHOW_ERRORS)) {
-                        SHOW_ERR (L"Error while converting filepath to relative value for \"%ls\"",
-                                filepath.wstring ().c_str ());
-                    }
-                }
-            }
-
-            continue;
         }
 
         if (isSymlink) {
@@ -660,7 +638,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 }
                 else {
 
-                    if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                    if (get_option (SHOW_ABSNOINDENT)) {
                         wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
                                     "SYMLINK",
                                     filepath.wstring ().c_str (),
@@ -707,8 +685,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     print_last_modif_time (entry);
                 }
 
-                // if (get_option (SHOW_ABSNOINDENT) | get_option (SHOW_RELNOINDENT)) {
-                if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                if (get_option (SHOW_ABSNOINDENT)) {
                     wprintf (L"%16lld    %ls\n",
                                 curFileSize,
                                 filepath.wstring ().c_str ());
@@ -746,7 +723,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     wprintf (L"%24c", ' ');
                 }
 
-                if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+                if (get_option (SHOW_ABSNOINDENT)) {
                     wprintf (L"%16s    %ls\n",
                                 specialEntryType,
                                 filepath.wstring ().c_str ());
@@ -783,7 +760,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 print_last_modif_time (entry);
             }
 
-            if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+            if (get_option (SHOW_ABSNOINDENT)) {
                 wprintf (L"%16lld    <%ls>\n",
                             curFileSize,
                             filepath.wstring ().c_str ());
@@ -836,8 +813,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
 
         // if either of the noindent options were set, then dont print the indentations for this directory
-        // if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
-        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if (get_option (SHOW_ABSNOINDENT)) {
             wprintf (L"%16lld    %-*c<%llu files>\n",
                         totalFileSize,
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
@@ -865,7 +841,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
 
         // if either of the noindent options were set, then dont print the indentations for this directory
-        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if (get_option (SHOW_ABSNOINDENT)) {
             wprintf (L"%16c    %-*c<%llu symlinks>\n",
                         '-',
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
@@ -893,7 +869,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
 
         // if either of the noindent options were set, then dont print the indentations for this directory
-        if (get_option (SHOW_ABSNOINDENT) || get_option (SHOW_RELNOINDENT)) {
+        if (get_option (SHOW_ABSNOINDENT)) {
             wprintf (L"%16c    %-*c<%llu special entries>\n",
                         '-',
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
@@ -1294,6 +1270,16 @@ main (int argc, char *argv[]) noexcept
             }
             break;
 
+        case 5:
+
+            if (strncmp (argv[i], "--abs", 5) == 0) {
+                set_option (SHOW_ABSNOINDENT);
+            }
+            else {
+                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+            }
+            break;
+
         case 6:
             if (strncmp (argv[i], "--help", 6) == 0) {
                 set_option (HELP);
@@ -1427,25 +1413,6 @@ main (int argc, char *argv[]) noexcept
                 // set the option and skip the next argument (that is the search pattern)
                 set_option (SEARCH_NOEXT);
                 searchPattern = argv[++i];
-            }
-            else if (strncmp (argv[i], "--abs-noindent", 14) == 0) {
-
-                if (get_option (SHOW_RELNOINDENT)) {
-                    wprintf (L"Can not simultaneously set flags \"--abs-noindent\" and \"--rel-noindent\"\n");
-                    wprintf (L"Terminating...\n");
-                    std::exit (-1);
-                }
-
-                set_option (SHOW_ABSNOINDENT);
-            }
-            else if (strncmp (argv[i], "--rel-noindent", 14) == 0) {
-                if (get_option (SHOW_ABSNOINDENT)) {
-                    wprintf (L"Can not simultaneously set flags \"--abs-noindent\" and \"--rel-noindent\"\n");
-                    wprintf (L"Terminating...\n");
-                    std::exit (-1);
-                }
-
-                set_option (SHOW_RELNOINDENT);
             }
             else {
                 printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
