@@ -15,10 +15,13 @@
 
 #define SHOW_RECURSIVE          (0)                                                         /** Option that specifies if directories should be recursively scanned and displayed */
 
+#if defined (_WIN32) || (_WIN64)
+#else
 #define SHOW_PERMISSIONS        (1)                                                         /** Option that specified if the permissions of a filesystem entry should be printed */
 #define SHOW_LASTTIME           (2)                                                         /** Option that specified if the last modification time of a file or directory should be printed */
+#endif
 
-#define SHOW_ABSNOINDENT        (3)                                                         /** Option that specifies if the absoulute paths of all entries should be printed without indentation */
+#define SHOW_ABSNOINDENT        (3)                                                         /** Option that specifies if the absolute paths of all entries should be printed without indentation */
 
 #define SHOW_FILES              (5)                                                         /** Option that specifies if all files within a directory need to be individually displayed */
 #define SHOW_SYMLINKS           (6)                                                         /** Option that specifies if all symlinks within a directory need to be individually displayed */
@@ -26,7 +29,7 @@
 
 #define SEARCH_EXACT            (8)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */
 #define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */
-#define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */ //! UNUSED
+#define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */
 
 #define SHOW_DIR_SIZE           (11)                                                        /** Option that specifies if directory sizes should be recursively calculated and shown */
 #define SHOW_ERRORS             (12)
@@ -79,14 +82,14 @@
 #if defined (ERR_NEWL)                                                                            /** Determines if each error entry should have empty lines before and after */
 #define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
                                             L"\n"                               \
-                                            pMsg L" (Code %d, %s)\n",           \
+                                            pMsg L" (Code %d, %hs)\n",           \
                                             L"\n",                              \
                                             __VA_ARGS__,                        \
                                             sErrorCode.value (),                \
                                             sErrorCode.message ().c_str ());                /** Macro to print errors in a well formatted manner */
 #else
 #define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
-                                            pMsg L" (Code %d, %s)\n",           \
+                                            pMsg L" (Code %d, %hs)\n",           \
                                             __VA_ARGS__,                        \
                                             sErrorCode.value (),                \
                                             sErrorCode.message ().c_str ());                /** Macro to print errors in a well formatted manner */
@@ -96,17 +99,20 @@ namespace fs                    = std::filesystem;
 namespace chrono                = std::chrono;
 
 /** Usage instructions of the program */
-static const wchar_t    *usage      = L"Usage: %s [PATH] [options]\n"
+static const wchar_t    *usage      = L"Usage: %hs [PATH] [options]\n"
                                     L"Scan through the filesystem starting from PATH.\n"
                                     L"\n"
-                                    L"Example: %s \"..\" --recursive --files\n"
+                                    L"Example: %hs \"..\" --recursive --files\n"
                                     L"\n"
                                     L"Options:\n"
                                     L"-r, --recursive             Recursively go through directories\n"
+#if defined (_WIN32) || defined (_WIN64)
+#else
                                     L"-p, --permissions           Show Permissions of each entry\n"
                                     L"-t, --modification-time     Show Time of Last Modification\n"
+#endif
                                     L"\n"
-                                    L"    --abs                   Show the complete absoulute path without indentation\n"
+                                    L"    --abs                   Show the complete absolute path without indentation\n"
                                     L"\n"
                                     L"-f, --files                 Show Regular Files (normally hidden)\n"
                                     L"-l, --symlinks              Show Symlinks\n"
@@ -490,7 +496,7 @@ print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
                     "%b %d %Y  %H:%M",
                     std::localtime (&lastModifTime));
 
-        wprintf (L"%20s", formattedTime);
+        wprintf (L"%20hs", formattedTime);
     }
 }
 
@@ -645,13 +651,13 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 else {
 
                     if (get_option (SHOW_ABSNOINDENT)) {
-                        wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
+                        wprintf ((isDir) ? (L"%16hs    <%ls> -> <%ls>\n") : (L"%16hs    %ls -> %ls\n"),
                                     "SYMLINK",
                                     filepath.wstring ().c_str (),
                                     targetPath.wstring ().c_str ());
                     }
                     else {
-                        wprintf ((isDir) ? (L"%16s    %-*c<%ls> -> <%ls>\n") : (L"%16s    %-*c%ls -> %ls\n"),
+                        wprintf ((isDir) ? (L"%16hs    %-*c<%ls> -> <%ls>\n") : (L"%16hs    %-*c%ls -> %ls\n"),
                                     "SYMLINK",
                                     indentWidth,
                                     ' ',
@@ -735,12 +741,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 #endif
 
                 if (get_option (SHOW_ABSNOINDENT)) {
-                    wprintf (L"%16s    %ls\n",
+                    wprintf (L"%16hs    %ls\n",
                                 specialEntryType,
                                 filepath.wstring ().c_str ());
                 }
                 else {
-                    wprintf (L"%16s    %-*c%ls\n",
+                    wprintf (L"%16hs    %-*c%ls\n",
                                 specialEntryType,
                                 indentWidth,
                                 ' ',
@@ -790,9 +796,9 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             }
         }
         else {
-            printf ("File type of \"%ls\" can not be determined\n",
+            wprintf (L"File type of \"%ls\" can not be determined\n",
                     filepath.wstring ().c_str ());
-            printf ("Terminating...\n");
+            wprintf (L"Terminating...\n");
             exit (-1);
         }
     }
@@ -1050,7 +1056,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 #endif
 
                 if (isSymlink) {
-                    wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
+                    wprintf ((isDir) ? (L"%16hs    <%ls> -> <%ls>\n") : (L"%16hs    %ls -> %ls\n"),
                                 "SYMLINK",
                                 filepath.wstring ().c_str (),
                                 targetPath.wstring ().c_str ());
@@ -1098,7 +1104,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     }
 #endif
 
-                    wprintf (L"%16s    %ls\n",
+                    wprintf (L"%16hs    %ls\n",
                                 specialEntryType,
                                 filepath.wstring ().c_str ());
                 }
@@ -1250,15 +1256,21 @@ main (int argc, char *argv[]) noexcept
                     && strnlen (argv[i + 1], MAX_ARG_LEN) != 0
                     && argv[i + 1][0] != '-') {
                     if (!parse_str_to_uint64 (argv[i + 1], sRecursionLevel)) {
-                        printf ("Invalid value for recursion depth \"%s\"\nPlease provide a positive whole number\n", argv[i + 1]);
+                        wprintf (L"Invalid value for recursion depth \"%hs\"\nPlease provide a positive whole number\n", argv[i + 1]);
                         return -1;
                     }
                     ++i;
                 }
             }
+#if defined (_WIN32) || defined (_WIN64)
+#else
+            else if (strncmp (argv[i], "-p", 2) == 0) {
+                set_option (SHOW_PERMISSIONS);
+            }
             else if (strncmp (argv[i], "-t", 2) == 0) {
                 set_option (SHOW_LASTTIME);
             }
+#endif
             else if (strncmp (argv[i], "-f", 2) == 0) {
                 set_option (SHOW_FILES);
             }
@@ -1267,9 +1279,6 @@ main (int argc, char *argv[]) noexcept
             }
             else if (strncmp (argv[i], "-s", 2) == 0) {
                 set_option (SHOW_SPECIAL);
-            }
-            else if (strncmp (argv[i], "-p", 2) == 0) {
-                set_option (SHOW_PERMISSIONS);
             }
             else if (strncmp (argv[i], "-S", 2) == 0) {
 
@@ -1283,7 +1292,7 @@ main (int argc, char *argv[]) noexcept
                 // make sure that a search pattern was provided
                 // if (i == (argc - 1) || strnlen (argv[i + 1], MAX_ARG_LEN) == 0 || argv[i + 1] == '-') {
                 if (i == (uint64_t)(argc - 1) || strnlen (argv[i + 1], MAX_ARG_LEN) == 0) {
-                    wprintf (L"No Search pattern provided after \"%s\" flag\n", argv[i]);
+                    wprintf (L"No Search pattern provided after \"%hs\" flag\n", argv[i]);
                     wprintf (L"Terminating...\n");
                     std::exit (-1);
                 }
@@ -1296,7 +1305,7 @@ main (int argc, char *argv[]) noexcept
                 set_option (SHOW_ERRORS);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
 
@@ -1306,7 +1315,7 @@ main (int argc, char *argv[]) noexcept
                 set_option (SHOW_ABSNOINDENT);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
 
@@ -1315,7 +1324,7 @@ main (int argc, char *argv[]) noexcept
                 set_option (HELP);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
 
@@ -1324,7 +1333,7 @@ main (int argc, char *argv[]) noexcept
                 set_option (SHOW_FILES);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
 
@@ -1351,7 +1360,7 @@ main (int argc, char *argv[]) noexcept
                 searchPattern = argv[++i];
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
 
@@ -1360,7 +1369,7 @@ main (int argc, char *argv[]) noexcept
                 set_option (SHOW_SPECIAL);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
 
@@ -1392,7 +1401,7 @@ main (int argc, char *argv[]) noexcept
                 set_option (SHOW_ERRORS);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
 
@@ -1403,26 +1412,27 @@ main (int argc, char *argv[]) noexcept
                 // if the user has provided the number of levels, then parse it into a string
                 if ((i + 1) < (uint64_t)argc && strnlen (argv[i + 1], MAX_ARG_LEN) != 0 && argv[i + 1][0] != '-') {
                     if (!parse_str_to_uint64 (argv[i + 1], sRecursionLevel)) {
-                        printf ("Invalid value for recursion depth \"%s\"\nPlease provide a positive whole number\n", argv[i + 1]);
+                        wprintf (L"Invalid value for recursion depth \"%hs\"\nPlease provide a positive whole number\n", argv[i + 1]);
                         return -1;
                     }
                     ++i;
                 }
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
-
+#if defined (_WIN32) || defined (_WIN64)
+#else
         case 13:
             if (strncmp (argv[i], "--permissions", 13) == 0) {
                 set_option (SHOW_PERMISSIONS);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
-
+#endif
         case 14:
             if (strncmp (argv[i], "--search-noext", 14) == 0) {
 
@@ -1435,7 +1445,7 @@ main (int argc, char *argv[]) noexcept
                 // make sure that a search pattern was provided
                 // if (i == (uint64_t)(argc - 1) || strnlen (argv[i + 1], MAX_ARG_LEN) == 0 || argv[i + 1] == '-') {
                 if (i == (uint64_t)(argc - 1) || strnlen (argv[i + 1], MAX_ARG_LEN) == 0) {
-                    wprintf (L"No Search pattern provided after \"%s\" flag\n", argv[i]);
+                    wprintf (L"No Search pattern provided after \"%hs\" flag\n", argv[i]);
                     wprintf (L"Terminating...\n");
                     std::exit (-1);
                 }
@@ -1445,36 +1455,37 @@ main (int argc, char *argv[]) noexcept
                 searchPattern = argv[++i];
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
-
+#if defined (_WIN32) || defined (_WIN64)
+#else
         case 19:
             if (strncmp (argv[i], "--modification-time", 19) == 0) {
                 set_option (SHOW_LASTTIME);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
-
+#endif
         case 20:
             if (strncmp (argv[i], "--recursive-dir-size", 20) == 0) {
                 set_option (SHOW_DIR_SIZE);
             }
             else {
-                printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
 
         default:
-            printf ("Ignoring Unknown Option \"%s\"\n", argv[i]);
+            wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
         }
     }
 
     // print the usage instructions and terminate
     if (get_option (HELP)) {
-        wprintf (usage, argv[0]);
+        wprintf (usage, argv[0], argv[0]);
         return 0;
     }
 
