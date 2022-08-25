@@ -76,7 +76,7 @@
 
 // #define ERR_NEWL                true
 
-#ifdef ERR_NEWL                                                                             /** Determines if each error entry should have empty lines before and after */
+#if defined (ERR_NEWL)                                                                            /** Determines if each error entry should have empty lines before and after */
 #define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
                                             L"\n"                               \
                                             pMsg L" (Code %d, %s)\n",           \
@@ -162,7 +162,7 @@ static const wchar_t    *TotalSum    = L"Summary of traversal of \"%ls\"\n"
 static const wchar_t    *sInitPath          {nullptr};                                      /** Initial path to start the scan from */
 static const wchar_t    *sSearchPattern     {nullptr};                                      /** Pattern to search for if any of the search options are set */
 
-#ifdef USE_KMP_SEARCH
+#if defined (USE_KMP_SEARCH)
 static uint64_t         sSearchPatternLen   {};
 #endif
 
@@ -190,7 +190,7 @@ static uint64_t         sNumDirsMatched     {};                                 
 
 static bool             sPrintSummary       {};                                             /** Flag to determine whether the summary should be printed or not */
 
-#ifdef USE_KMP_SEARCH
+#if defined (USE_KMP_SEARCH)
 static uint64_t          sLpsArray[MAX_ARG_LEN]        {};                                      /** LPS array to use */
 #endif
 
@@ -274,8 +274,7 @@ clear_option (const uint8_t &pBit) noexcept
     return result;
 }
 
-#ifdef USE_KMP_SEARCH
-/**
+#if defined (USE_KMP_SEARCH)/**
  * @brief
  *
  */
@@ -316,8 +315,7 @@ bool
 check_contains (const std::wstring &pStr)
 {
 
-#ifdef USE_KMP_SEARCH
-
+#if defined (USE_KMP_SEARCH)
     for (uint64_t i = 0, j = 0; (pStr.size () + j) >= (sSearchPatternLen + i); ) {
         if (sSearchPattern[j] == pStr[i]) {
             ++i;
@@ -456,6 +454,9 @@ calc_dir_size (const wchar_t *pPath) noexcept
     return totalDirSize;
 }
 
+#if defined (_WIN32) || defined (_WIN64)
+#else
+
 /**
  * @brief                   Prints the last modified time of a filesystem entry (formatted)
  *
@@ -517,6 +518,7 @@ print_permissions (const fs::file_status &pEntryStatus) noexcept
             ((entryPerms & fs::perms::others_exec) == fs::perms::none) ? ('x') : ('-')
         );
 }
+#endif
 
 /**
  * @brief                   Scans through and prints the contents of a directory
@@ -620,6 +622,9 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             ++symlinkCnt;
 
             if (get_option (SHOW_SYMLINKS)) {
+
+#if defined (_WIN32) || defined (_WIN64)
+#else
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
@@ -627,6 +632,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 if (get_option (SHOW_LASTTIME)) {
                     wprintf (L"%20c", '-');
                 }
+#endif
 
                 targetPath  = fs::read_symlink (entry, sErrorCode);
 
@@ -676,6 +682,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             ++regularFileCnt;
             if (get_option (SHOW_FILES)) {
 
+#if defined (_WIN32) || defined (_WIN64)
+#else
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
@@ -683,6 +691,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 if (get_option (SHOW_LASTTIME)) {
                     print_last_modif_time (entry);
                 }
+#endif
 
                 if (get_option (SHOW_ABSNOINDENT)) {
                     wprintf (L"%16lld    %ls\n",
@@ -714,13 +723,16 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     specialEntryType    = "FIFO PIPE";
                 }
 
+#if defined (_WIN32) || defined (_WIN64)
+#else
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
 
                 if (get_option (SHOW_LASTTIME)) {
-                    wprintf (L"%24c", ' ');
+                    wprintf (L"%20c", ' ');
                 }
+#endif
 
                 if (get_option (SHOW_ABSNOINDENT)) {
                     wprintf (L"%16s    %ls\n",
@@ -747,6 +759,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 curFileSize     = -1;
             }
 
+#if defined (_WIN32) || defined (_WIN64)
+#else
             if (get_option (SHOW_PERMISSIONS)) {
                 print_permissions (entryStatus);
             }
@@ -754,6 +768,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             if (get_option (SHOW_LASTTIME)) {
                 print_last_modif_time (entry);
             }
+#endif
 
             if (get_option (SHOW_ABSNOINDENT)) {
                 wprintf (L"%16lld    <%ls>\n",
@@ -799,6 +814,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
     if (regularFileCnt != 0 && !get_option (SHOW_FILES)) {
 
+#if defined (_WIN32) || defined (_WIN64)
+#else
         // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
@@ -806,6 +823,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
+#endif
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
@@ -827,6 +845,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     // if the current dir has some symlinks and the show symlinks option was not set (they were not displayed), then print the number of symlinks atleast
     if (symlinkCnt != 0 && !get_option (SHOW_SYMLINKS)) {
 
+#if defined (_WIN32) || defined (_WIN64)
+#else
         // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
@@ -834,6 +854,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
+#endif
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
@@ -855,6 +876,8 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     // if the current dir has some files and the show files option was not set (they were not displayed), then print the number of files atleast
     if (specialCnt != 0 && !get_option (SHOW_SPECIAL)) {
 
+#if defined (_WIN32) || defined (_WIN64)
+#else
         // if the permissions and last modification options are set, print gaps before the directory's summary to format it better
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
@@ -862,6 +885,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
+#endif
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
@@ -1013,6 +1037,9 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             }
 
             else {
+
+#if defined (_WIN32) || defined (_WIN64)
+#else
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
@@ -1020,6 +1047,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 if (get_option (SHOW_LASTTIME)) {
                     print_last_modif_time (entry);
                 }
+#endif
 
                 if (isSymlink) {
                     wprintf ((isDir) ? (L"%16s    <%ls> -> <%ls>\n") : (L"%16s    %ls -> %ls\n"),
@@ -1059,13 +1087,16 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                         specialEntryType    = "FIFO PIPE";
                     }
 
+#if defined (_WIN32) || defined (_WIN64)
+#else
                     if (get_option (SHOW_PERMISSIONS)) {
                         print_permissions (entryStatus);
                     }
 
                     if (get_option (SHOW_LASTTIME)) {
-                        wprintf (L"%24c", ' ');
+                        wprintf (L"%20c", ' ');
                     }
+#endif
 
                     wprintf (L"%16s    %ls\n",
                                 specialEntryType,
@@ -1456,7 +1487,7 @@ main (int argc, char *argv[]) noexcept
     if (searchPattern != nullptr) {
         sSearchPattern  = widen_string (searchPattern);
 
-#ifdef USE_KMP_SEARCH
+#if defined (USE_KMP_SEARCH)
         if (get_option (SEARCH_CONTAINS)) {
             sSearchPatternLen   = strnlen (searchPattern, MAX_ARG_LEN);
             compute_lps ();

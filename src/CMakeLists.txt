@@ -18,3 +18,5 @@ else ()
     # target_compile_options (fss PRIVATE "-Wall" "-Wextra" "-Werror" "-pedantic-errors" "-O3")
     target_compile_options (fss PRIVATE "-Wall" "-Wextra" "-Werror" "-pedantic-errors")
 endif ()
+
+target_compile_definitions(fss PRIVATE "_CRT_SECURE_NO_WARNINGS")
