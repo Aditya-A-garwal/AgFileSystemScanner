@@ -547,7 +547,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     static bool             isSymlink;                                                      /** Stores whether the current entry is a symlink */
     static bool             isSpecial;                                                      /** Stores whether the current entry is a special file */
 
-    int64_t                 totalDirSize;                                                   /** Stores the total size of this entry */
     int64_t                 totalFileSize;                                                  /** Combines sizes of all files within this directory */
     int64_t                 curFileSize;                                                    /** Size of file that is being currently processed */
 
@@ -577,7 +576,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     }
 
     // initialize all counters to 0
-    totalDirSize        = 0;
     regularFileCnt      = 0;
     symlinkCnt          = 0;
     specialCnt          = 0;
@@ -673,7 +671,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             }
             else {
                 totalFileSize   += curFileSize;
-                totalDirSize    += curFileSize;
             }
 
             ++regularFileCnt;
@@ -748,10 +745,6 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             }
             else {
                 curFileSize     = -1;
-            }
-
-            if (curFileSize != -1) {
-                totalDirSize    += curFileSize;
             }
 
             if (get_option (SHOW_PERMISSIONS)) {
@@ -1411,7 +1404,7 @@ main (int argc, char *argv[]) noexcept
                 // make sure that a search pattern was provided
                 // if (i == (uint64_t)(argc - 1) || strnlen (argv[i + 1], MAX_ARG_LEN) == 0 || argv[i + 1] == '-') {
                 if (i == (uint64_t)(argc - 1) || strnlen (argv[i + 1], MAX_ARG_LEN) == 0) {
-                    wprintf (L"No Search pattern provided after \"%ls\" flag\n", argv[i]);
+                    wprintf (L"No Search pattern provided after \"%s\" flag\n", argv[i]);
                     wprintf (L"Terminating...\n");
                     std::exit (-1);
                 }
