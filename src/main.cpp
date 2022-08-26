@@ -254,9 +254,9 @@ clear_option (const uint8_t &pBit) noexcept
     wchar_t     *result {nullptr};                                                          /** Resultant wide string after the conversion */
 
     // calculate the length of the input string and allocate a wide string of the corresponding size
-    len     = strnlen (pPtr, MAX_PATH_LEN);
-    result  = (wchar_t *)malloc (sizeof (wchar_t) * (len + 1));
-    memset (result, 0, sizeof (wchar_t) * (len + 1));
+    len     = strnlen (pPtr, MAX_PATH_LEN) + 1;
+    result  = (wchar_t *)malloc (sizeof (wchar_t) * len);
+    memset (result, 0, sizeof (wchar_t) * len);
 
     if (result == nullptr) {
         fprintf (stderr,
@@ -264,11 +264,14 @@ clear_option (const uint8_t &pBit) noexcept
         std::exit (-1);
     }
 
-    for (uint64_t i = 0; i <= len; ++i) {
+    for (uint64_t i = 0; i < len; ++i) {
         ((char *)&result[i])[0] = pPtr[i];
         ((char *)&result[i])[1] = 0;
+
+        if constexpr (sizeof (wchar_t) >= 4) {
         ((char *)&result[i])[2] = 0;
         ((char *)&result[i])[3] = 0;
+        }
     }
 
     // if (std::mbstowcs (result, pPtr, len) != len) {
