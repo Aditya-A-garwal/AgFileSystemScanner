@@ -18,8 +18,8 @@
 #if defined (_WIN32) || (_WIN64)
 #else
 #define SHOW_PERMISSIONS        (1)                                                         /** Option that specified if the permissions of a filesystem entry should be printed */
-#define SHOW_LASTTIME           (2)                                                         /** Option that specified if the last modification time of a file or directory should be printed */
 #endif
+#define SHOW_LASTTIME           (2)                                                         /** Option that specified if the last modification time of a file or directory should be printed */
 
 #define SHOW_ABSNOINDENT        (3)                                                         /** Option that specifies if the absolute paths of all entries should be printed without indentation */
 
@@ -109,8 +109,8 @@ static const wchar_t    *usage      = L"Usage: %hs [PATH] [options]\n"
 #if defined (_WIN32) || defined (_WIN64)
 #else
                                     L"-p, --permissions           Show Permissions of each entry\n"
-                                    L"-t, --modification-time     Show Time of Last Modification\n"
 #endif
+                                    L"-t, --modification-time     Show Time of Last Modification\n"
                                     L"\n"
                                     L"    --abs                   Show the complete absolute path without indentation\n"
                                     L"\n"
@@ -269,8 +269,8 @@ clear_option (const uint8_t &pBit) noexcept
         ((char *)&result[i])[1] = 0;
 
         if constexpr (sizeof (wchar_t) >= 4) {
-        ((char *)&result[i])[2] = 0;
-        ((char *)&result[i])[3] = 0;
+            ((char *)&result[i])[2] = 0;
+            ((char *)&result[i])[3] = 0;
         }
     }
 
@@ -463,9 +463,6 @@ calc_dir_size (const wchar_t *pPath) noexcept
     return totalDirSize;
 }
 
-#if defined (_WIN32) || defined (_WIN64)
-#else
-
 /**
  * @brief                   Prints the last modified time of a filesystem entry (formatted)
  *
@@ -492,8 +489,18 @@ print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
     }
     else {
         // convert the time point on chrono::file_clock to a time_t object (time passed since epoch) and format it
+
+#if defined (_WIN32) || defined (_WIN64)
+        lastModifTime   = chrono::system_clock::to_time_t (
+                        chrono::utc_clock::to_sys (
+                                chrono::file_clock::to_utc (lastModifTpFs)
+                                )
+                        );
+#else
         lastModifTime   = chrono::system_clock::to_time_t (
             chrono::file_clock::to_sys (lastModifTpFs));
+#endif
+
         strftime (formattedTime,
                     MAX_FMT_TIME_LEN,
                     "%b %d %Y  %H:%M",
@@ -502,6 +509,9 @@ print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
         wprintf (L"%20hs", formattedTime);
     }
 }
+
+#if defined (_WIN32) || defined (_WIN64)
+#else
 
 /**
  * @brief                   Prints the permissions of a filesystem entry (formatted)
@@ -637,11 +647,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
+#endif
 
                 if (get_option (SHOW_LASTTIME)) {
                     wprintf (L"%20c", '-');
                 }
-#endif
 
                 targetPath  = fs::read_symlink (entry, sErrorCode);
 
@@ -696,11 +706,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
+#endif
 
                 if (get_option (SHOW_LASTTIME)) {
                     print_last_modif_time (entry);
                 }
-#endif
 
                 if (get_option (SHOW_ABSNOINDENT)) {
                     wprintf (L"%16lld    %ls\n",
@@ -737,11 +747,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
+#endif
 
                 if (get_option (SHOW_LASTTIME)) {
                     wprintf (L"%20c", ' ');
                 }
-#endif
 
                 if (get_option (SHOW_ABSNOINDENT)) {
                     wprintf (L"%16hs    %ls\n",
@@ -773,11 +783,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             if (get_option (SHOW_PERMISSIONS)) {
                 print_permissions (entryStatus);
             }
+#endif
 
             if (get_option (SHOW_LASTTIME)) {
                 print_last_modif_time (entry);
             }
-#endif
 
             if (get_option (SHOW_ABSNOINDENT)) {
                 wprintf (L"%16lld    <%ls>\n",
@@ -829,10 +839,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
         }
+#endif
+
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
-#endif
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
@@ -860,10 +871,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
         }
+#endif
+
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
-#endif
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
@@ -891,10 +903,11 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         if (get_option (SHOW_PERMISSIONS)) {
             wprintf (L"            ");
         }
+#endif
+
         if (get_option (SHOW_LASTTIME)) {
             wprintf (L"%20c", ' ');
         }
-#endif
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
@@ -1052,11 +1065,11 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 if (get_option (SHOW_PERMISSIONS)) {
                     print_permissions (entryStatus);
                 }
+#endif
 
                 if (get_option (SHOW_LASTTIME)) {
                     print_last_modif_time (entry);
                 }
-#endif
 
                 if (isSymlink) {
                     wprintf ((isDir) ? (L"%16hs    <%ls> -> <%ls>\n") : (L"%16hs    %ls -> %ls\n"),
@@ -1101,11 +1114,11 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                     if (get_option (SHOW_PERMISSIONS)) {
                         print_permissions (entryStatus);
                     }
+#endif
 
                     if (get_option (SHOW_LASTTIME)) {
                         wprintf (L"%20c", ' ');
                     }
-#endif
 
                     wprintf (L"%16hs    %ls\n",
                                 specialEntryType,
@@ -1270,10 +1283,11 @@ main (int argc, char *argv[]) noexcept
             else if (strncmp (argv[i], "-p", 2) == 0) {
                 set_option (SHOW_PERMISSIONS);
             }
+#endif
+
             else if (strncmp (argv[i], "-t", 2) == 0) {
                 set_option (SHOW_LASTTIME);
             }
-#endif
             else if (strncmp (argv[i], "-f", 2) == 0) {
                 set_option (SHOW_FILES);
             }
@@ -1461,8 +1475,6 @@ main (int argc, char *argv[]) noexcept
                 wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
-#if defined (_WIN32) || defined (_WIN64)
-#else
         case 19:
             if (strncmp (argv[i], "--modification-time", 19) == 0) {
                 set_option (SHOW_LASTTIME);
@@ -1471,7 +1483,6 @@ main (int argc, char *argv[]) noexcept
                 wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
             }
             break;
-#endif
         case 20:
             if (strncmp (argv[i], "--recursive-dir-size", 20) == 0) {
                 set_option (SHOW_DIR_SIZE);
@@ -1495,7 +1506,8 @@ main (int argc, char *argv[]) noexcept
     // convert the provided path to a wide string (if no path was provided, use the relative path to the working directory '.')
     // it is very important to not use L"." directory, since sInitPath is freed at the end of the program
     // using a string literal would cause wrong behaviour (possibly crash the program)
-    sInitPath           = widen_string ((initPathStr == nullptr) ? (".") : (initPathStr));
+    // sInitPath           = widen_string ((initPathStr == nullptr) ? (".") : (initPathStr));
+    sInitPath           = (initPathStr == nullptr) ? widen_string (".") : widen_string (initPathStr);
 
     // if a search pattern was provided, convert it to a wide string and use the search function
     if (searchPattern != nullptr) {
