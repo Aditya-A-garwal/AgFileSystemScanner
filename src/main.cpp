@@ -13,36 +13,70 @@
 #include <filesystem>
 #include <chrono>
 
-#define SHOW_RECURSIVE          (0)                                                         /** Option that specifies if directories should be recursively scanned and displayed */
+
+/** Option that specifies if directories should be recursively scanned and displayed */
+#define SHOW_RECURSIVE          (0)
 
 #if defined (_WIN32) || (_WIN64)
 #else
-#define SHOW_PERMISSIONS        (1)                                                         /** Option that specified if the permissions of a filesystem entry should be printed */
+
+/** Option that specified if the permissions of a filesystem entry should be printed */
+#define SHOW_PERMISSIONS        (1)
 #endif
-#define SHOW_LASTTIME           (2)                                                         /** Option that specified if the last modification time of a file or directory should be printed */
 
-#define SHOW_ABSNOINDENT        (3)                                                         /** Option that specifies if the absolute paths of all entries should be printed without indentation */
+/** Option that specified if the last modification time of a file or directory should be printed */
+#define SHOW_LASTTIME           (2)
 
-#define SHOW_FILES              (5)                                                         /** Option that specifies if all files within a directory need to be individually displayed */
-#define SHOW_SYMLINKS           (6)                                                         /** Option that specifies if all symlinks within a directory need to be individually displayed */
-#define SHOW_SPECIAL            (7)                                                         /** Option that specifies if all special files (such as sockets, block devices etc.) within a directory need to be individually displayed */
 
-#define SEARCH_EXACT            (8)                                                         /** Option that specifies if only those entries whose name matches a given pattern should be shown */
-#define SEARCH_NOEXT            (9)                                                         /** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */
-#define SEARCH_CONTAINS         (10)                                                        /** Option that specifies if only those entries whose name contains a given pattern should be shown */
+/** Option that specifies if the absolute paths of all entries should be printed without indentation */
+#define SHOW_ABSNOINDENT        (3)
 
-#define SHOW_DIR_SIZE           (11)                                                        /** Option that specifies if directory sizes should be recursively calculated and shown */
+
+/** Option that specifies if all files within a directory need to be individually displayed */
+#define SHOW_FILES              (5)
+
+/** Option that specifies if all symlinks within a directory need to be individually displayed */
+#define SHOW_SYMLINKS           (6)
+
+/** Option that specifies if all special files (such as sockets, block devices etc.) within a directory need to be individually displayed */
+#define SHOW_SPECIAL            (7)
+
+
+/** Option that specifies if only those entries whose name matches a given pattern should be shown */
+#define SEARCH_EXACT            (8)
+
+/** Option that specifies if only those entries whose name (without the extension) matches a given pattern should be shown */
+#define SEARCH_NOEXT            (9)
+
+/** Option that specifies if only those entries whose name contains a given pattern should be shown */
+#define SEARCH_CONTAINS         (10)
+
+
+/** Option that specifies if directory sizes should be recursively calculated and shown */
+#define SHOW_DIR_SIZE           (11)
 #define SHOW_ERRORS             (12)
 
-#define HELP                    (13)                                                        /** Option that specifies if usage instructions need to be printed */
 
-#define MAX_ARG_LEN             (32)                                                        /** Maximum allowed length of an argument (other than the path) after which it is not checked further */
-#define MAX_PATH_LEN            (256)                                                       /** Maximum allowed length of the provided path after which any further characters are ignored */
-#define MAX_FMT_TIME_LEN        (64)                                                        /** Maximum allowed length of the string that stores the last modified time (formatted) of a file */
+/** Option that specifies if usage instructions need to be printed */
+#define HELP                    (13)
 
-#define INDENT_COL_WIDTH        (4)                                                         /** Number of spaces by which to further indent each subsequent nested directory's entries */
 
-// #define USE_KMP_SEARCH          true                                                        /** Defined if Knuth Morris Prat search needs to be used */
+/** Maximum allowed length of an argument (other than the path) after which it is not checked further */
+#define MAX_ARG_LEN             (32)
+
+/** Maximum allowed length of the provided path after which any further characters are ignored */
+#define MAX_PATH_LEN            (256)
+
+/** Maximum allowed length of the string that stores the last modified time (formatted) of a file */
+#define MAX_FMT_TIME_LEN        (64)
+
+
+/** Number of spaces by which to further indent each subsequent nested directory's entries */
+#define INDENT_COL_WIDTH        (4)
+
+
+/** Defined if Knuth Morris Prat search needs to be used */
+// #define USE_KMP_SEARCH          true
 
 #define red                     "\033[0;31m"
 #define Lred                    L"\033[0;31m"
@@ -79,7 +113,8 @@
 
 // #define ERR_NEWL                true
 
-#if defined (ERR_NEWL)                                                                            /** Determines if each error entry should have empty lines before and after */
+/** Determines if each error entry should have empty lines before and after */
+#if defined (ERR_NEWL)
 #define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
                                             L"\n"                               \
                                             pMsg L" (Code %d, %hs)\n",          \
@@ -173,29 +208,46 @@ static const wchar_t    *sSearchPattern     {nullptr};                          
 static uint64_t         sSearchPatternLen   {};
 #endif
 
-static uint64_t         sOptionMask         {};                                             /** Bitmask to represent command line options provided by the user */
-static std::error_code  sErrorCode          {};                                             /** Container for error code to be passed around when dealing with std::filesystem artifacts */
+/** Bitmask to represent command line options provided by the user */
+static uint64_t         sOptionMask         {};
+/** Container for error code to be passed around when dealing with std::filesystem artifacts */
+static std::error_code  sErrorCode          {};
 
-static uint64_t         sErrorEntries       {};                                             /** Number of entries that were encountered but could not be processed/displayed for whatever reason */ //! UNUSED
+/** Number of entries that were encountered but could not be processed/displayed for whatever reason */ //! UNUSED
+static uint64_t         sErrorEntries       {};
 
-static uint64_t         sRecursionLevel     {};                                             /** Number of levels of directories to go within if the recursive option is set */
+/** Number of levels of directories to go within if the recursive option is set */
+static uint64_t         sRecursionLevel     {};
 
-static uint64_t         sNumFilesTotal      {};                                             /** Total number of files traversed */
-static uint64_t         sNumSymlinksTotal   {};                                             /** Total number of Symlinks traversed */
-static uint64_t         sNumSpecialTotal    {};                                             /** Total number of special files traversed */
-static uint64_t         sNumDirsTotal       {};                                             /** Total number of directories traversed */
+/** Total number of files traversed */
+static uint64_t         sNumFilesTotal      {};
+/** Total number of Symlinks traversed */
+static uint64_t         sNumSymlinksTotal   {};
+/** Total number of special files traversed */
+static uint64_t         sNumSpecialTotal    {};
+/** Total number of directories traversed */
+static uint64_t         sNumDirsTotal       {};
 
-static uint64_t         sNumFilesRoot       {};                                             /** Number of files traversed in the root directory */
-static uint64_t         sNumSymlinksRoot    {};                                             /** Number of symlinks traversed in the root directory */
-static uint64_t         sNumSpecialRoot     {};                                             /** Number of special files traversed in the root directory */
-static uint64_t         sNumDirsRoot        {};                                             /** Number of subdirectories in the root directory */
+/** Number of files traversed in the root directory */
+static uint64_t         sNumFilesRoot       {};
+/** Number of symlinks traversed in the root directory */
+static uint64_t         sNumSymlinksRoot    {};
+/** Number of special files traversed in the root directory */
+static uint64_t         sNumSpecialRoot     {};
+/** Number of subdirectories in the root directory */
+static uint64_t         sNumDirsRoot        {};
 
-static uint64_t         sNumFilesMatched    {};                                             /** Number of files matching the search pattern */
-static uint64_t         sNumSymlinksMatched {};                                             /** Number of symlinks matching the search pattern */
-static uint64_t         sNumSpecialMatched  {};                                             /** Number of special files matching the search pattern */
-static uint64_t         sNumDirsMatched     {};                                             /** Number of subdirectories matching the search pattern */
+/** Number of files matching the search pattern */
+static uint64_t         sNumFilesMatched    {};
+/** Number of symlinks matching the search pattern */
+static uint64_t         sNumSymlinksMatched {};
+/** Number of special files matching the search pattern */
+static uint64_t         sNumSpecialMatched  {};
+/** Number of subdirectories matching the search pattern */
+static uint64_t         sNumDirsMatched     {};
 
-static bool             sPrintSummary       {};                                             /** Flag to determine whether the summary should be printed or not */
+/** Flag to determine whether the summary should be printed or not */
+static bool             sPrintSummary       {};
 
 #if defined (USE_KMP_SEARCH)
 static uint64_t          sLpsArray[MAX_ARG_LEN]        {};                                      /** LPS array to use */
@@ -223,6 +275,8 @@ get_option (const uint8_t &pBit) noexcept
 inline void
 set_option (const uint8_t &pBit) noexcept
 {
+    // a given bit can be set by generating a bitmask where only the desired bit is set
+    // and performing a logical OR operation between the initial value and the mask
     sOptionMask |= (1ULL << pBit);
 }
 
@@ -234,6 +288,8 @@ set_option (const uint8_t &pBit) noexcept
 inline void
 clear_option (const uint8_t &pBit) noexcept
 {
+    // a given bit can be cleared by generating a bitmask where only the desired bit is not
+    // set and performing a logical AND operation between the initial value and the mask
     sOptionMask &= ~(1ULL << pBit);
 }
 
@@ -251,19 +307,31 @@ clear_option (const uint8_t &pBit) noexcept
 {
     // setlocale (LC_CTYPE, "UTF-32");
 
-    uint64_t    len;                                                                        /** Length of the string to convert to a wide string (including the null termination character) */
-    wchar_t     *result {nullptr};                                                          /** Resultant wide string after the conversion */
+    /** Length of the string to convert to a wide string (including the null termination character) */
+    uint64_t    len;
+    /** Resultant wide string after the conversion */
+    wchar_t     *result {nullptr};
 
     // calculate the length of the input string and allocate a wide string of the corresponding size
+    // this string needs to be freed by a call to free
     len     = strnlen (pPtr, MAX_PATH_LEN) + 1;
     result  = (wchar_t *)malloc (sizeof (wchar_t) * len);
-    memset (result, 0, sizeof (wchar_t) * len);
+
+    // memset (result, 0, sizeof (wchar_t) * len);
 
     if (result == nullptr) {
         fprintf (stderr,
         "Could not allocate Wide String when converting path\n");
         std::exit (-1);
     }
+
+    // On Windows and Linux/OSX, sizeof (char) is 1 and the encoding is UTF-8
+    // On Windows, sizeof (wchar_t) is 2 and the encoding is UTF-16
+    // On Linux/OSX, sizeof (wchar_t) is 4 and the encoding is UTF-32
+
+    // Simply copying the char (byte) to the least significant byte of the wchar_t
+    // should be enough to create the new wide string
+    // the remaining bytes can be cleared
 
     for (uint64_t i = 0; i < len; ++i) {
         ((char *)&result[i])[0] = pPtr[i];
@@ -285,7 +353,7 @@ clear_option (const uint8_t &pBit) noexcept
 }
 
 #if defined (USE_KMP_SEARCH)/**
- * @brief
+ * @brief                   Computes the LPS array for KMP search
  *
  */
 void
@@ -365,6 +433,7 @@ check_contains (const std::wstring &pStr)
 bool
 parse_str_to_uint64 (const char *pPtr, uint64_t &pRes) noexcept
 {
+    // go through all characters and discard the string if any of the characters is not a decimal digit
     for (; *pPtr != 0; ++pPtr) {
         if (*pPtr < '0' || *pPtr > '9') {
             return false;
@@ -385,19 +454,29 @@ parse_str_to_uint64 (const char *pPtr, uint64_t &pRes) noexcept
 [[nodiscard]] int64_t
 calc_dir_size (const wchar_t *pPath) noexcept
 {
-    fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
-    fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
-    fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
+    /** Iterator to the elements within the current directory */
+    fs::directory_iterator  iter (pPath, sErrorCode);
+    /** Iterator to the element after the last element in the current directory */
+    fs::directory_iterator  fin;
+    /** Reference to current entry (used while dereferencing iter) */
+    fs::directory_entry     entry;
 
-    static bool             isDir;                                                          /** Stores whether the current entry is a directory */
-    static bool             isFile;                                                         /** Stores whether the current entry is a regular file */
-    static bool             isSymlink;                                                      /** Stores whether the current entry is a symlink */
-    static bool             isSpecial;                                                      /** Stores whether the current entry is a special file */
+    /** Stores whether the current entry is a directory */
+    static bool             isDir;
+    /** Stores whether the current entry is a regular file */
+    static bool             isFile;
+    /** Stores whether the current entry is a symlink */
+    static bool             isSymlink;
+    /** Stores whether the current entry is a special file */
+    static bool             isSpecial;
 
-    int64_t                 totalDirSize;                                                   /** Stores the total size of this entry */
-    int64_t                 curFileSize;                                                    /** Size of file that is being currently processed */
+    /** Stores the total size of this entry */
+    int64_t                 totalDirSize;
+    /** Size of file that is being currently processed */
+    int64_t                 curFileSize;
 
-    fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
+    /** Status of the current entry (permissions, type, etc.) */
+    fs::file_status         entryStatus;
 
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
@@ -432,6 +511,7 @@ calc_dir_size (const wchar_t *pPath) noexcept
         isSymlink       = entry.is_symlink ();
         isSpecial       = entry.is_other ();
 
+        // check if the entry is a regular file
         if (isFile) {
             // read the size of the current file and add it to the total size of the directory
             // if the size can not be read, don't add it to the final size
@@ -446,6 +526,7 @@ calc_dir_size (const wchar_t *pPath) noexcept
                 totalDirSize    += curFileSize;
             }
         }
+        // check if the entry is a directory and make sure it is not a symlink (prevents circular scanning)
         else if (isDir && !isSymlink) {
             curFileSize     = calc_dir_size (entry.path ().wstring ().c_str ());
 
@@ -472,9 +553,12 @@ calc_dir_size (const wchar_t *pPath) noexcept
 void
 print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
 {
-    static fs::file_time_type   lastModifTpFs;                                              /** Time point when the given entry was last modified */
-    static time_t               lastModifTime;                                              /** Time point when the given entry was last modified as a time_t instance */
-    static char                 formattedTime[MAX_FMT_TIME_LEN];                            /** Time point when the given entry was last modified formatted as a string */
+    /** Time point when the given entry was last modified */
+    static fs::file_time_type   lastModifTpFs;
+    /** Time point when the given entry was last modified as a time_t instance */
+    static time_t               lastModifTime;
+    /** Time point when the given entry was last modified formatted as a string */
+    static char                 formattedTime[MAX_FMT_TIME_LEN];
 
     // get the timepoint on which it was last modified (the timepoint is on chrono::file_clock)
     lastModifTpFs   = pFsEntry.last_write_time (sErrorCode);
@@ -522,7 +606,8 @@ print_last_modif_time (const fs::directory_entry &pFsEntry) noexcept
 void
 print_permissions (const fs::file_status &pEntryStatus) noexcept
 {
-    static fs::perms            entryPerms;                                                 /** Permissions of the current entry */
+    /** Permissions of the current entry */
+    static fs::perms            entryPerms;
 
     entryPerms      = pEntryStatus.permissions ();
 
@@ -549,7 +634,8 @@ print_permissions (const fs::file_status &pEntryStatus) noexcept
 void
 scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 {
-    const uint64_t      indentWidth     = INDENT_COL_WIDTH * pLevel;                        /** Number of spaces to enter before printing the entry for the current function call */
+    /** Number of spaces to enter before printing the entry for the current function call */
+    const uint64_t      indentWidth     = INDENT_COL_WIDTH * pLevel;
 
     // the path can not be a nullptr, it must be a valid string (FIND A WAY TO FREE THE STRINGS ALLOCATED IN MAIN)
     if (pPath == nullptr) {
@@ -557,29 +643,46 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         std::exit (-1);
     }
 
-    fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
-    fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
-    fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
+    /** Iterator to the elements within the current directory */
+    fs::directory_iterator  iter (pPath, sErrorCode);
+    /** Iterator to the element after the last element in the current directory */
+    fs::directory_iterator  fin;
+    /** Reference to current entry (used while dereferencing iter) */
+    fs::directory_entry     entry;
 
-    fs::path                filepath;                                                       /** Name of the current entry */
-    fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
+    /** Name of the current entry */
+    fs::path                filepath;
+    /** Status of the current entry (permissions, type, etc.) */
+    fs::file_status         entryStatus;
 
-    static bool             isDir;                                                          /** Stores whether the current entry is a directory */
-    static bool             isFile;                                                         /** Stores whether the current entry is a regular file */
-    static bool             isSymlink;                                                      /** Stores whether the current entry is a symlink */
-    static bool             isSpecial;                                                      /** Stores whether the current entry is a special file */
+    /** Stores whether the current entry is a directory */
+    static bool             isDir;
+    /** Stores whether the current entry is a regular file */
+    static bool             isFile;
+    /** Stores whether the current entry is a symlink */
+    static bool             isSymlink;
+    /** Stores whether the current entry is a special file */
+    static bool             isSpecial;
 
-    int64_t                 totalFileSize;                                                  /** Combines sizes of all files within this directory */
-    int64_t                 curFileSize;                                                    /** Size of file that is being currently processed */
+    /** Combines sizes of all files within this directory */
+    int64_t                 totalFileSize;
+    /** Size of file that is being currently processed */
+    int64_t                 curFileSize;
 
-    uint64_t                symlinkCnt;                                                     /** Number of symlinks in the current directory */
-    uint64_t                regularFileCnt;                                                 /** Number of regular files within this directory */
-    uint64_t                specialCnt;                                                     /** Number of special files in the current directory */
-    uint64_t                subdirCnt;                                                      /** Number of sub-directories in the current directory */
+    /** Number of symlinks in the current directory */
+    uint64_t                symlinkCnt;
+    /** Number of regular files within this directory */
+    uint64_t                regularFileCnt;
+    /** Number of special files in the current directory */
+    uint64_t                specialCnt;
+    /** Number of sub-directories in the current directory */
+    uint64_t                subdirCnt;
 
-    fs::path                targetPath;                                                     /** Stores the path to the target of the symlink if the entry is a symlink */
+    /** Stores the path to the target of the symlink if the entry is a symlink */
+    fs::path                targetPath;
 
-    const char              *specialEntryType;                                              /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
+    /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
+    const char              *specialEntryType;
 
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
@@ -945,26 +1048,39 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     }
 
 
-    fs::directory_iterator  iter (pPath, sErrorCode);                                       /** Iterator to the elements within the current directory */
-    fs::directory_iterator  fin;                                                            /** Iterator to the element after the last element in the current directory */
-    fs::directory_entry     entry;                                                          /** Reference to current entry (used while dereferencing iter) */
+    /** Iterator to the elements within the current directory */
+    fs::directory_iterator  iter (pPath, sErrorCode);
+    /** Iterator to the element after the last element in the current directory */
+    fs::directory_iterator  fin;
+    /** Reference to current entry (used while dereferencing iter) */
+    fs::directory_entry     entry;
 
-    static bool             isDir;                                                          /** Stores whether the current entry is a directory */
-    static bool             isFile;                                                         /** Stores whether the current entry is a regular file */
-    static bool             isSymlink;                                                      /** Stores whether the current entry is a symlink */
-    static bool             isSpecial;                                                      /** Stores whether the current entry is a special file */
+    /** Stores whether the current entry is a directory */
+    static bool             isDir;
+    /** Stores whether the current entry is a regular file */
+    static bool             isFile;
+    /** Stores whether the current entry is a symlink */
+    static bool             isSymlink;
+    /** Stores whether the current entry is a special file */
+    static bool             isSpecial;
 
-    static bool             isMatch;                                                        /** Stores whether the current entry matches the search pattern */
+    /** Stores whether the current entry matches the search pattern */
+    static bool             isMatch;
 
-    uint64_t                curFileSize;                                                    /** Size of file that is being currently processed */
+    /** Size of file that is being currently processed */
+    uint64_t                curFileSize;
 
-    fs::file_status         entryStatus;                                                    /** Status of the current entry (permissions, type, etc.) */
+    /** Status of the current entry (permissions, type, etc.) */
+    fs::file_status         entryStatus;
 
-    fs::path                filepath;                                                       /** Name of the current entry */
+    /** Name of the current entry */
+    fs::path                filepath;
 
-    const char              *specialEntryType;                                              /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
+    /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
+    const char              *specialEntryType;
 
-    fs::path                targetPath;                                                     /** Stores the path to the target of the symlink if the entry is a symlink */
+    /** Stores the path to the target of the symlink if the entry is a symlink */
+    fs::path                targetPath;
 
 
     // if an error occoured while trying to get the directory iterator, then report it here
@@ -1027,7 +1143,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         else if (get_option (SEARCH_NOEXT)) {
             isMatch = filepath.stem ().wstring () == sSearchPattern;
         }
-        else { //!
+        else {
             isMatch = check_contains (filepath.filename ().wstring ());
         }
 
@@ -1235,8 +1351,10 @@ search_path_init (const wchar_t *pPath) noexcept
 int
 main (int argc, char *argv[]) noexcept
 {
-    const char          *initPathStr;                                                       /** Path to start the scan process from, as a narrow string */
-    const char          *searchPattern;                                                     /** Pattern to search for, as a narrow string */
+    /** Path to start the scan process from, as a narrow string */
+    const char          *initPathStr;
+    /** Pattern to search for, as a narrow string */
+    const char          *searchPattern;
 
     // initialize all paths to null (represents a value that has not been provided)
     initPathStr         = nullptr;
