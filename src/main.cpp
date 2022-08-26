@@ -82,14 +82,14 @@
 #if defined (ERR_NEWL)                                                                            /** Determines if each error entry should have empty lines before and after */
 #define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
                                             L"\n"                               \
-                                            pMsg L" (Code %d, %hs)\n",           \
+                                            pMsg L" (Code %d, %hs)\n",          \
                                             L"\n",                              \
                                             __VA_ARGS__,                        \
                                             sErrorCode.value (),                \
                                             sErrorCode.message ().c_str ());                /** Macro to print errors in a well formatted manner */
 #else
 #define SHOW_ERR(pMsg, ...)     fwprintf (stderr,                               \
-                                            pMsg L" (Code %d, %hs)\n",           \
+                                            pMsg L" (Code %d, %hs)\n",          \
                                             __VA_ARGS__,                        \
                                             sErrorCode.value (),                \
                                             sErrorCode.message ().c_str ());                /** Macro to print errors in a well formatted manner */
@@ -105,26 +105,27 @@ static const wchar_t    *usage      = L"Usage: %hs [PATH] [options]\n"
                                     L"Example: %hs \"..\" --recursive --files\n"
                                     L"\n"
                                     L"Options:\n"
-                                    L"-r, --recursive             Recursively go through directories\n"
+                                    L"-r, --recursive             Recursively scan directories (can be followed by a positive integer to indicate the depth)\n"
 #if defined (_WIN32) || defined (_WIN64)
 #else
-                                    L"-p, --permissions           Show Permissions of each entry\n"
+                                    L"-p, --permissions           Show Permissions of all entries\n"
 #endif
-                                    L"-t, --modification-time     Show Time of Last Modification\n"
-                                    L"\n"
-                                    L"    --abs                   Show the complete absolute path without indentation\n"
+                                    L"-t, --modification-time     Show time of last modification of entries\n"
                                     L"\n"
                                     L"-f, --files                 Show Regular Files (normally hidden)\n"
-                                    L"-l, --symlinks              Show Symlinks\n"
+                                    L"-l, --symlinks              Show Symlinks (normally hidden)\n"
                                     L"-s, --special               Show Special Files such as sockets, pipes, etc. (normally hidden)\n"
                                     L"\n"
-                                    L"-S, --search                Only log those entries whose name matches exactly with the given string. (normally hidden)\n"
-                                    L"    --search-noext          Only log those entries whose name (excluding extension) matches exactly with the given string. (normally hidden)\n"
-                                    L"    --contains              Only log those entries whose name contains the given string. (normally hidden)\n"
+                                    L"-d, --dir-size              Recursively calculate and display the size of each directory\n"
                                     L"\n"
-                                    L"-h, --help                  Print Usage Instructions\n"
-                                    L"    --recursive-dir-size    Use the size of the inode structure of a directory rather than recursively going inside to check it\n"
+                                    L"-a, --abs                   Show the absolute path of each entry without any indentation\n"
+                                    L"\n"
+                                    L"-S, --search                Only show entries whose name completely matches the following string completely\n"
+                                    L"    --search-noext          Only show entries whose name(except for the extension) matches the following string completely\n"
+                                    L"    --contains              Only show entries whose name contains the following string completely\n"
+                                    L"\n"
                                     L"-e, --show-err              Show errors\n"
+                                    L"-h, --help                  Print Usage Instructions\n"
                                     L"\n";
 
 /** Unformatted summary string for directory to Totalerse (not including subdirectories) */
@@ -1261,10 +1262,7 @@ main (int argc, char *argv[]) noexcept
         switch (argLen) {
 
         case 2:
-            if (strncmp (argv[i], "-h", 2) == 0) {
-                set_option (HELP);
-            }
-            else if (strncmp (argv[i], "-r", 2) == 0) {
+            if (strncmp (argv[i], "-r", 2) == 0) {
                 set_option (SHOW_RECURSIVE);
 
                 // if the user has provided the number of levels, then parse it into a string
@@ -1284,10 +1282,10 @@ main (int argc, char *argv[]) noexcept
                 set_option (SHOW_PERMISSIONS);
             }
 #endif
-
             else if (strncmp (argv[i], "-t", 2) == 0) {
                 set_option (SHOW_LASTTIME);
             }
+
             else if (strncmp (argv[i], "-f", 2) == 0) {
                 set_option (SHOW_FILES);
             }
@@ -1297,6 +1295,14 @@ main (int argc, char *argv[]) noexcept
             else if (strncmp (argv[i], "-s", 2) == 0) {
                 set_option (SHOW_SPECIAL);
             }
+
+            else if (strncmp (argv[i], "-d", 2) == 0) {
+                set_option (SHOW_DIR_SIZE);
+            }
+            else if (strncmp (argv[i], "-a", 2) == 0) {
+                set_option (SHOW_ABSNOINDENT);
+            }
+
             else if (strncmp (argv[i], "-S", 2) == 0) {
 
                 // make sure that multiple search modes are not being used simultaneously
@@ -1320,6 +1326,9 @@ main (int argc, char *argv[]) noexcept
             }
             else if (strncmp (argv[i], "-e", 2) == 0) {
                 set_option (SHOW_ERRORS);
+            }
+            else if (strncmp (argv[i], "-h", 2) == 0) {
+                set_option (HELP);
             }
             else {
                 wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
@@ -1414,7 +1423,10 @@ main (int argc, char *argv[]) noexcept
                 set_option (SEARCH_CONTAINS);
                 searchPattern = argv[++i];
             }
-            else if (strncmp (argv[i], "--hide-err", 10) == 0) {
+            else if (strncmp (argv[i], "--dir-size", 10) == 0) {
+                set_option (SHOW_DIR_SIZE);
+            }
+            else if (strncmp (argv[i], "--show-err", 10) == 0) {
                 set_option (SHOW_ERRORS);
             }
             else {
@@ -1478,14 +1490,6 @@ main (int argc, char *argv[]) noexcept
         case 19:
             if (strncmp (argv[i], "--modification-time", 19) == 0) {
                 set_option (SHOW_LASTTIME);
-            }
-            else {
-                wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
-            }
-            break;
-        case 20:
-            if (strncmp (argv[i], "--recursive-dir-size", 20) == 0) {
-                set_option (SHOW_DIR_SIZE);
             }
             else {
                 wprintf (L"Ignoring Unknown Option \"%hs\"\n", argv[i]);
