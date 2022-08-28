@@ -889,12 +889,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 }
 
                 if (get_option (SHOW_ABSNOINDENT)) {
-                    wprintf (L"%16s    %ls\n",
+                    wprintf (L"%16hs    %ls\n",
                                 format_int (curFileSize),
                                 filepath.wstring ().c_str ());
                 }
                 else {
-                    wprintf (L"%16s    %-*c%ls\n",
+                    wprintf (L"%16hs    %-*c%ls\n",
                                 format_int (curFileSize),
                                 indentWidth,
                                 ' ',
@@ -966,12 +966,12 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             }
 
             if (get_option (SHOW_ABSNOINDENT)) {
-                wprintf (L"%16s    <%ls>\n",
+                wprintf (L"%16hs    <%ls>\n",
                             (curFileSize == -1) ? (" ") : format_int (curFileSize),
                             filepath.wstring ().c_str ());
             }
             else {
-                wprintf (L"%16s    %-*c<%ls>\n",
+                wprintf (L"%16hs    %-*c<%ls>\n",
                             (curFileSize == -1) ? (" ") : format_int (curFileSize),
                             indentWidth,
                             ' ',
@@ -1025,14 +1025,14 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
-            wprintf (L"%16s    %-*c<%s files>\n",
+            wprintf (L"%16hs    %-*c<%hs files>\n",
                         fmtIntBuff,
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
                         ' ',
                         format_int (regularFileCnt));
         }
         else {
-            wprintf (L"%16s    %-*c<%s files>\n",
+            wprintf (L"%16hs    %-*c<%hs files>\n",
                         fmtIntBuff,
                         indentWidth,
                         ' ',
@@ -1057,14 +1057,14 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
-            wprintf (L"%16c    %-*c<%s symlinks>\n",
+            wprintf (L"%16c    %-*c<%hs symlinks>\n",
                         '-',
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
                         ' ',
                         format_int (symlinkCnt));
         }
         else {
-            wprintf (L"%16c    %-*c<%s symlinks>\n",
+            wprintf (L"%16c    %-*c<%hs symlinks>\n",
                         '-',
                         indentWidth,
                         ' ',
@@ -1089,7 +1089,7 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
-            wprintf (L"%16c    %-*c<%s special entries>\n",
+            wprintf (L"%16c    %-*c<%hs special entries>\n",
                         '-',
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
                         ' ',
@@ -1279,7 +1279,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                         curFileSize = -1;
                     }
 
-                    wprintf (L"%16s    %ls\n",
+                    wprintf (L"%16hs    %ls\n",
                                 format_int (curFileSize),
                                 filepath.wstring ().c_str ());
                 }
@@ -1323,7 +1323,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                         curFileSize = -1;
                     }
 
-                    wprintf (L"%16s    <%ls>\n",
+                    wprintf (L"%16hs    <%ls>\n",
                             (curFileSize == -1) ? (" ") : format_int (curFileSize),
                             filepath.wstring ().c_str ());
                 }
