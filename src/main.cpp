@@ -70,6 +70,9 @@
 /** Maximum allowed length of the string that stores the last modified time (formatted) of a file */
 #define MAX_FMT_TIME_LEN        (64)
 
+/** Maximum allowed length of the string that stores a formatted integer */
+#define MAX_FMT_INT_LEN         (32)
+
 
 /** Number of spaces by which to further indent each subsequent nested directory's entries */
 #define INDENT_COL_WIDTH        (4)
@@ -130,11 +133,24 @@
                                             sErrorCode.message ().c_str ());                /** Macro to print errors in a well formatted manner */
 #endif
 
+// trick to see if a type is signed
+// for signed types, ~int_t (0) < int_t (0)
+// for unsigned types, ~int_t (0) > int_t (0)
+
+// this is because the most significant bit is treated as a negative value
+// in signed types, and the result becomes -1
+
+/** Macro to check if a type is a signed type or not */
+#define is_signed_type(int_t)   (~int_t(0) < int_t(0))
+
 namespace fs                    = std::filesystem;
 namespace chrono                = std::chrono;
 
 /** Usage instructions of the program */
-static const wchar_t    *usage      = L"Usage: %hs [PATH] [options]\n"
+static const wchar_t    *usage      = L"\n"
+                                    L"File System Scanner (dumblebots.com)\n"
+                                    L"\n"
+                                    L"Usage: %hs [PATH] [options]\n"
                                     L"Scan through the filesystem starting from PATH.\n"
                                     L"\n"
                                     L"Example: %hs \"..\" --recursive --files\n"
@@ -166,39 +182,39 @@ static const wchar_t    *usage      = L"Usage: %hs [PATH] [options]\n"
 /** Unformatted summary string for directory to Totalerse (not including subdirectories) */
 static const wchar_t    *rootSum    = L"\n"
                                     L"Summary of \"%ls\"\n"
-                                    L"<%lu files>\n"
-                                    L"<%lu symlinks>\n"
-                                    L"<%lu special files>\n"
-                                    L"<%lu subdirectories>\n"
-                                    L"<%lu total entries>\n"
+                                    L"<%hs files>\n"
+                                    L"<%hs symlinks>\n"
+                                    L"<%hs special files>\n"
+                                    L"<%hs subdirectories>\n"
+                                    L"<%hs total entries>\n"
                                     L"\n";
 
 /** Unformatted summary string for the directory to Totalerse (including subdirectories) */
 static const wchar_t    *recSum     = L"Including subdirectories\n"
-                                    L"<%lu files>\n"
-                                    L"<%lu symlinks>\n"
-                                    L"<%lu special files>\n"
-                                    L"<%lu subdirectories>\n"
-                                    L"<%lu total entries>\n"
+                                    L"<%hs files>\n"
+                                    L"<%hs symlinks>\n"
+                                    L"<%hs special files>\n"
+                                    L"<%hs subdirectories>\n"
+                                    L"<%hs total entries>\n"
                                     L"\n";
 
 /** Unformatted summary string for number of entries found matching search pattern (in search mode) */
 static const wchar_t    *foundSum   = L"\n"
                                     L"Summary of matching entries\n"
-                                    L"<%lu files>\n"
-                                    L"<%lu symlinks>\n"
-                                    L"<%lu special files>\n"
-                                    L"<%lu subdirectories>\n"
-                                    L"<%lu total entries>\n"
+                                    L"<%hs files>\n"
+                                    L"<%hs symlinks>\n"
+                                    L"<%hs special files>\n"
+                                    L"<%hs subdirectories>\n"
+                                    L"<%hs total entries>\n"
                                     L"\n";
 
 /** Unformatted summary string for number of entries traversed while matching search pattern (in search mode) */
 static const wchar_t    *TotalSum    = L"Summary of traversal of \"%ls\"\n"
-                                    L"<%lu files>\n"
-                                    L"<%lu symlinks>\n"
-                                    L"<%lu special files>\n"
-                                    L"<%lu subdirectories>\n"
-                                    L"<%lu total entries>\n"
+                                    L"<%hs files>\n"
+                                    L"<%hs symlinks>\n"
+                                    L"<%hs special files>\n"
+                                    L"<%hs subdirectories>\n"
+                                    L"<%hs total entries>\n"
                                     L"\n";
 
 static const wchar_t    *sInitPath          {nullptr};                                      /** Initial path to start the scan from */
@@ -212,9 +228,6 @@ static uint64_t         sSearchPatternLen   {};
 static uint64_t         sOptionMask         {};
 /** Container for error code to be passed around when dealing with std::filesystem artifacts */
 static std::error_code  sErrorCode          {};
-
-/** Number of entries that were encountered but could not be processed/displayed for whatever reason */ //! UNUSED
-static uint64_t         sErrorEntries       {};
 
 /** Number of levels of directories to go within if the recursive option is set */
 static uint64_t         sRecursionLevel     {};
@@ -248,6 +261,9 @@ static uint64_t         sNumDirsMatched     {};
 
 /** Flag to determine whether the summary should be printed or not */
 static bool             sPrintSummary       {};
+
+/** Buffer to use for storing formatted integers */
+static char             sFmtIntBuff[MAX_FMT_INT_LEN];
 
 #if defined (USE_KMP_SEARCH)
 static uint64_t          sLpsArray[MAX_ARG_LEN]        {};                                      /** LPS array to use */
@@ -350,6 +366,59 @@ clear_option (const uint8_t &pBit) noexcept
     // }
 
     return result;
+}
+
+template <typename int_t>
+[[nodiscard]] char
+*format_int (int_t pValue)
+{
+    /** */
+    uint8_t         buffLen;
+    /** */
+    uint8_t         digit;
+
+    /** */
+    bool            isSigned;
+
+    if (pValue == 0) {
+        sFmtIntBuff[0] = '0';
+        sFmtIntBuff[1] = 0;
+
+        return sFmtIntBuff;
+    }
+
+    if constexpr (is_signed_type (int_t)) {
+        isSigned    = false;
+        if (pValue < 0) {
+            pValue      = -pValue;
+            isSigned    = true;
+        }
+    }
+
+    for (buffLen = 0; pValue != 0; ) {
+        digit                   = pValue % 10;
+        pValue                  = pValue / 10;
+
+        sFmtIntBuff[buffLen++]  = '0' + digit;
+
+        if (((buffLen % 4) == 3) && (pValue != 0)) {
+            sFmtIntBuff[buffLen++]  = ',';
+        }
+    }
+
+    if constexpr (is_signed_type (int_t)) {
+        if (isSigned) {
+            sFmtIntBuff[buffLen++]  = '-';
+        }
+    }
+
+    for (int i = 0; i < buffLen / 2; ++i) {
+        std::swap (sFmtIntBuff[i], sFmtIntBuff[buffLen - i - 1]);
+    }
+
+    sFmtIntBuff[buffLen]    = 0;
+
+    return sFmtIntBuff;
 }
 
 #if defined (USE_KMP_SEARCH)/**
@@ -684,6 +753,9 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     /** Stores the specific type of an entry if it is a special entry (if the specific type can not be determined, stores L"SPECIAL") */
     const char              *specialEntryType;
 
+    /** Buffer to store the total size of files formatted with periods */
+    static char             fmtIntBuff[MAX_FMT_INT_LEN];
+
     // if an error occoured while trying to get the directory iterator, then report it here
     if (sErrorCode.value () != 0) {
         if (get_option (SHOW_ERRORS)) {
@@ -817,13 +889,13 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                 }
 
                 if (get_option (SHOW_ABSNOINDENT)) {
-                    wprintf (L"%16lld    %ls\n",
-                                curFileSize,
+                    wprintf (L"%16s    %ls\n",
+                                format_int (curFileSize),
                                 filepath.wstring ().c_str ());
                 }
                 else {
-                    wprintf (L"%16lld    %-*c%ls\n",
-                                curFileSize,
+                    wprintf (L"%16s    %-*c%ls\n",
+                                format_int (curFileSize),
                                 indentWidth,
                                 ' ',
                                 filepath.filename ().wstring ().c_str ());
@@ -894,13 +966,13 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             }
 
             if (get_option (SHOW_ABSNOINDENT)) {
-                wprintf (L"%16lld    <%ls>\n",
-                            curFileSize,
+                wprintf (L"%16s    <%ls>\n",
+                            (curFileSize == -1) ? (" ") : format_int (curFileSize),
                             filepath.wstring ().c_str ());
             }
             else {
-                wprintf (L"%16lld    %-*c<%ls>\n",
-                            curFileSize,
+                wprintf (L"%16s    %-*c<%ls>\n",
+                            (curFileSize == -1) ? (" ") : format_int (curFileSize),
                             indentWidth,
                             ' ',
                             filepath.filename ().wstring ().c_str ());
@@ -949,20 +1021,22 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
             wprintf (L"%20c", ' ');
         }
 
+        strcpy (fmtIntBuff, format_int (totalFileSize));
+
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
-            wprintf (L"%16lld    %-*c<%llu files>\n",
-                        totalFileSize,
+            wprintf (L"%16s    %-*c<%s files>\n",
+                        fmtIntBuff,
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),   // a single indent needs to be printed if this is not the root dir
                         ' ',
-                        regularFileCnt);
+                        format_int (regularFileCnt));
         }
         else {
-            wprintf (L"%16lld    %-*c<%llu files>\n",
-                        totalFileSize,
+            wprintf (L"%16s    %-*c<%s files>\n",
+                        fmtIntBuff,
                         indentWidth,
                         ' ',
-                        regularFileCnt);
+                        format_int (regularFileCnt));
         }
 
     }
@@ -983,18 +1057,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
-            wprintf (L"%16c    %-*c<%llu symlinks>\n",
+            wprintf (L"%16c    %-*c<%s symlinks>\n",
                         '-',
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
                         ' ',
-                        symlinkCnt);
+                        format_int (symlinkCnt));
         }
         else {
-            wprintf (L"%16c    %-*c<%llu symlinks>\n",
+            wprintf (L"%16c    %-*c<%s symlinks>\n",
                         '-',
                         indentWidth,
                         ' ',
-                        symlinkCnt);
+                        format_int (symlinkCnt));
         }
 
     }
@@ -1015,18 +1089,18 @@ scan_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 
         // if either of the noindent options were set, then dont print the indentations for this directory
         if (get_option (SHOW_ABSNOINDENT)) {
-            wprintf (L"%16c    %-*c<%llu special entries>\n",
+            wprintf (L"%16c    %-*c<%s special entries>\n",
                         '-',
                         (pLevel == 0) ? (0) : (INDENT_COL_WIDTH),
                         ' ',
-                        specialCnt);
+                        format_int (specialCnt));
         }
         else {
             wprintf (L"%16c    %-*c<%llu special entries>\n",
                         '-',
                         indentWidth,
                         ' ',
-                        specialCnt);
+                        format_int (specialCnt));
         }
     }
 
@@ -1068,7 +1142,7 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
     static bool             isMatch;
 
     /** Size of file that is being currently processed */
-    uint64_t                curFileSize;
+    int64_t                 curFileSize;
 
     /** Status of the current entry (permissions, type, etc.) */
     fs::file_status         entryStatus;
@@ -1132,9 +1206,6 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
         }
         else if (isDir) {
             ++sNumDirsTotal;
-        }
-        else {
-            ++sErrorEntries;
         }
 
         if (get_option (SEARCH_EXACT)) {
@@ -1208,8 +1279,8 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                         curFileSize = -1;
                     }
 
-                    wprintf (L"%16lld    %ls\n",
-                                curFileSize,
+                    wprintf (L"%16s    %ls\n",
+                                format_int (curFileSize),
                                 filepath.wstring ().c_str ());
                 }
 
@@ -1252,8 +1323,8 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
                         curFileSize = -1;
                     }
 
-                    wprintf (L"%16lld    <%ls>\n",
-                            curFileSize,
+                    wprintf (L"%16s    <%ls>\n",
+                            (curFileSize == -1) ? (" ") : format_int (curFileSize),
                             filepath.wstring ().c_str ());
                 }
             }
@@ -1276,6 +1347,17 @@ search_path (const wchar_t *pPath, const uint64_t &pLevel) noexcept
 void
 scan_path_init (const wchar_t *pPath) noexcept
 {
+    /** Buffer to store the number of files formatted with periods */
+    char    numFilesFmt[MAX_FMT_INT_LEN];
+    /** Buffer to store the number of symlinks formatted with periods */
+    char    numSymlinksFmt[MAX_FMT_INT_LEN];
+    /** Buffer to store the number of special files formatted with periods */
+    char    numSpecialFmt[MAX_FMT_INT_LEN];
+    /** Buffer to store the number of directories formatted with periods */
+    char    numDirsFmt[MAX_FMT_INT_LEN];
+    /** Buffer to store the total number of filesystem entries formatted with periods */
+    char    numTotalFmt[MAX_FMT_INT_LEN];
+
     sPrintSummary   = true;
 
     scan_path (pPath, 0);
@@ -1284,27 +1366,39 @@ scan_path_init (const wchar_t *pPath) noexcept
         return;
     }
 
+    strcpy (numFilesFmt, format_int (sNumFilesRoot));
+    strcpy (numSymlinksFmt, format_int (sNumSymlinksRoot));
+    strcpy (numSpecialFmt, format_int (sNumSpecialRoot));
+    strcpy (numDirsFmt, format_int (sNumDirsRoot));
+    strcpy (numTotalFmt, format_int (sNumFilesRoot +
+                                sNumSymlinksRoot +
+                                sNumSpecialRoot +
+                                sNumDirsRoot));
+
     wprintf (rootSum,
                 pPath,
-                sNumFilesRoot,
-                sNumSymlinksRoot,
-                sNumSpecialRoot,
-                sNumDirsRoot,
-                sNumFilesRoot +
-                sNumSymlinksRoot +
-                sNumSpecialRoot +
-                sNumDirsRoot);
+                numFilesFmt,
+                numSymlinksFmt,
+                numSpecialFmt,
+                numDirsFmt,
+                numTotalFmt);
 
     if (get_option (SHOW_RECURSIVE)) {
+        strcpy (numFilesFmt, format_int (sNumFilesTotal));
+        strcpy (numSymlinksFmt, format_int (sNumSymlinksTotal));
+        strcpy (numSpecialFmt, format_int (sNumSpecialTotal));
+        strcpy (numDirsFmt, format_int (sNumDirsTotal));
+        strcpy (numTotalFmt, format_int (sNumFilesTotal +
+                                    sNumSymlinksTotal +
+                                    sNumSpecialTotal +
+                                    sNumDirsTotal));
+
         wprintf (recSum,
-                    sNumFilesTotal,
-                    sNumSymlinksTotal,
-                    sNumSpecialTotal,
-                    sNumDirsTotal,
-                    sNumFilesTotal +
-                    sNumSymlinksTotal +
-                    sNumSpecialTotal +
-                    sNumDirsTotal);
+                    numFilesFmt,
+                    numSymlinksFmt,
+                    numSpecialFmt,
+                    numDirsFmt,
+                    numTotalFmt);
     }
 }
 
@@ -1316,6 +1410,17 @@ scan_path_init (const wchar_t *pPath) noexcept
 void
 search_path_init (const wchar_t *pPath) noexcept
 {
+    /** Buffer to store the number of files formatted with periods */
+    char    numFilesFmt[MAX_FMT_INT_LEN];
+    /** Buffer to store the number of symlinks formatted with periods */
+    char    numSymlinksFmt[MAX_FMT_INT_LEN];
+    /** Buffer to store the number of special files formatted with periods */
+    char    numSpecialFmt[MAX_FMT_INT_LEN];
+    /** Buffer to store the number of directories formatted with periods */
+    char    numDirsFmt[MAX_FMT_INT_LEN];
+    /** Buffer to store the total number of filesystem entries formatted with periods */
+    char    numTotalFmt[MAX_FMT_INT_LEN];
+
     sPrintSummary   = true;
 
     wprintf (L"Searching for %ls\n\n", sSearchPattern);
@@ -1326,25 +1431,38 @@ search_path_init (const wchar_t *pPath) noexcept
         return;
     }
 
+    strcpy (numFilesFmt, format_int (sNumFilesMatched));
+    strcpy (numSymlinksFmt, format_int (sNumSymlinksMatched));
+    strcpy (numSpecialFmt, format_int (sNumSpecialMatched));
+    strcpy (numDirsFmt, format_int (sNumDirsMatched));
+    strcpy (numTotalFmt, format_int (sNumFilesMatched +
+                                sNumSymlinksMatched +
+                                sNumSpecialMatched +
+                                sNumDirsMatched));
+
     wprintf (foundSum,
-                sNumFilesMatched,
-                sNumSymlinksMatched,
-                sNumSpecialMatched,
-                sNumDirsMatched,
-                sNumFilesMatched +
-                sNumSymlinksMatched +
-                sNumSpecialMatched +
-                sNumDirsMatched);
+                numFilesFmt,
+                numSymlinksFmt,
+                numSpecialFmt,
+                numDirsFmt,
+                numTotalFmt);
+
+    strcpy (numFilesFmt, format_int (sNumFilesTotal));
+    strcpy (numSymlinksFmt, format_int (sNumSymlinksTotal));
+    strcpy (numSpecialFmt, format_int (sNumSpecialTotal));
+    strcpy (numDirsFmt, format_int (sNumDirsTotal));
+    strcpy (numTotalFmt, format_int (sNumFilesTotal +
+                                sNumSymlinksTotal +
+                                sNumSpecialTotal +
+                                sNumDirsTotal));
+
     wprintf (TotalSum,
                 pPath,
-                sNumFilesTotal,
-                sNumSymlinksTotal,
-                sNumSpecialTotal,
-                sNumDirsTotal,
-                sNumFilesTotal +
-                sNumSymlinksTotal +
-                sNumSpecialTotal +
-                sNumDirsTotal);
+                numFilesFmt,
+                numSymlinksFmt,
+                numSpecialFmt,
+                numDirsFmt,
+                numTotalFmt);
 }
 
 
@@ -1639,11 +1757,6 @@ main (int argc, char *argv[]) noexcept
         if (get_option (SEARCH_CONTAINS)) {
             sSearchPatternLen   = strnlen (searchPattern, MAX_ARG_LEN);
             compute_lps ();
-
-            // for (auto &e : sLpsArray) {
-            //     fprintf (stderr, "%lu\t", e);
-            //     fprintf (stderr, "\n");
-            // }
         }
 #endif
         search_path_init (sInitPath);
